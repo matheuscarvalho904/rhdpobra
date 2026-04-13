@@ -32,7 +32,7 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->index('registration_number');
+            $table->index('code');
             $table->index('entry_date');
             $table->index('is_valid');
         });

@@ -1,0 +1,40 @@
+<?php
+
+namespace App\Filament\Resources\CostCenters\Tables;
+
+use Filament\Actions\EditAction;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+
+class CostCentersTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('company.name')
+                    ->label('Empresa')
+                    ->placeholder('Global')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('name')
+                    ->label('Centro de Custo')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('code')
+                    ->label('Código')
+                    ->searchable()
+                    ->sortable(),
+
+                IconColumn::make('is_active')
+                    ->label('Ativo')
+                    ->boolean(),
+            ])
+            ->recordActions([
+                EditAction::make(),
+            ]);
+    }
+}

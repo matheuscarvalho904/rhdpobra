@@ -1,0 +1,719 @@
+<?php
+
+namespace App\Filament\Resources\Employees\Schemas;
+
+use App\Models\Bank;
+use App\Models\Branch;
+use App\Models\CboCode;
+use App\Models\Company;
+use App\Models\ContractType;
+use App\Models\CostCenter;
+use App\Models\Department;
+use App\Models\JobRole;
+use App\Models\LaborUnion;
+use App\Models\Work;
+use App\Models\WorkShift;
+use App\Services\ContractProcessingRuleService;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
+use Filament\Support\RawJs;
+
+class EmployeeForm
+{
+    public static function configure(Schema $schema): Schema
+    {
+        return $schema->components([
+            Tabs::make('Cadastro do Colaborador')
+                ->columnSpanFull()
+                ->tabs([
+                    Tab::make('Dados Gerais')
+                        ->icon('heroicon-o-identification')
+                        ->schema([
+                            Section::make('Identificação e vínculo')
+                                ->columns(12)
+                                ->schema([
+                                    TextInput::make('code')
+                                        ->label('Código')
+                                        ->maxLength(30)
+                                        ->columnSpan(2),
+
+                                    TextInput::make('name')
+                                        ->label('Nome')
+                                        ->required()
+                                        ->maxLength(255)
+                                        ->columnSpan(5),
+
+                                    TextInput::make('social_name')
+                                        ->label('Nome Social')
+                                        ->maxLength(255)
+                                        ->columnSpan(5),
+
+                                    Select::make('status')
+                                        ->label('Status')
+                                        ->options([
+                                            'active' => 'Ativo',
+                                            'inactive' => 'Inativo',
+                                            'terminated' => 'Desligado',
+                                            'leave' => 'Afastado',
+                                        ])
+                                        ->default('active')
+                                        ->required()
+                                        ->columnSpan(2),
+
+                                    Toggle::make('is_active')
+                                        ->label('Ativo')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->columnSpan(2),
+
+                                    Select::make('company_id')
+                                        ->label('Empresa')
+                                        ->options(fn () => Company::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->required()
+                                        ->live()
+                                        ->columnSpan(8)
+                                        ->afterStateUpdated(function (Set $set): void {
+                                            $set('branch_id', null);
+                                            $set('work_id', null);
+                                        }),
+
+                                    Select::make('branch_id')
+                                        ->label('Filial')
+                                        ->options(fn (Get $get) => Branch::query()
+                                            ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->required()
+                                        ->live()
+                                        ->columnSpan(6)
+                                        ->afterStateUpdated(function (Set $set): void {
+                                            $set('work_id', null);
+                                        }),
+
+                                    Select::make('work_id')
+                                        ->label('Obra')
+                                        ->options(fn (Get $get) => Work::query()
+                                            ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                            ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(6),
+                                ]),
+                        ]),
+
+                    Tab::make('Documentação')
+                        ->icon('heroicon-o-document-text')
+                        ->schema([
+                            Section::make('Documentos principais')
+                                ->columns(12)
+                                ->schema([
+                                    TextInput::make('cpf')
+                                        ->label('CPF')
+                                        ->maxLength(14)
+                                        ->mask(RawJs::make("'999.999.999-99'"))
+                                        ->stripCharacters(['.', '-'])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(3),
+
+                                    TextInput::make('rg')
+                                        ->label('RG')
+                                        ->maxLength(30)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('rg_issuer')
+                                        ->label('Órgão Emissor')
+                                        ->maxLength(20)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('pis')
+                                        ->label('PIS')
+                                        ->maxLength(14)
+                                        ->mask(RawJs::make("'999.99999.99-9'"))
+                                        ->stripCharacters(['.', '-'])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(3),
+
+                                    TextInput::make('ctps')
+                                        ->label('CTPS')
+                                        ->maxLength(30)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('ctps_series')
+                                        ->label('Série CTPS')
+                                        ->maxLength(20)
+                                        ->columnSpan(3),
+                                ]),
+                        ]),
+
+                    Tab::make('Dados Pessoais')
+                        ->icon('heroicon-o-user')
+                        ->schema([
+                            Section::make('Informações pessoais')
+                                ->columns(12)
+                                ->schema([
+                                    DatePicker::make('birth_date')
+                                        ->label('Data de Nascimento')
+                                        ->columnSpan(3),
+
+                                    Select::make('gender')
+                                        ->label('Sexo')
+                                        ->options([
+                                            'male' => 'Masculino',
+                                            'female' => 'Feminino',
+                                            'other' => 'Outro',
+                                        ])
+                                        ->columnSpan(3),
+
+                                    Select::make('marital_status')
+                                        ->label('Estado Civil')
+                                        ->options([
+                                            'single' => 'Solteiro(a)',
+                                            'married' => 'Casado(a)',
+                                            'divorced' => 'Divorciado(a)',
+                                            'widowed' => 'Viúvo(a)',
+                                            'stable_union' => 'União Estável',
+                                        ])
+                                        ->columnSpan(3),
+
+                                    TextInput::make('nationality')
+                                        ->label('Nacionalidade')
+                                        ->maxLength(100)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('birthplace')
+                                        ->label('Naturalidade')
+                                        ->maxLength(100)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('mother_name')
+                                        ->label('Nome da Mãe')
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('father_name')
+                                        ->label('Nome do Pai')
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+                                ]),
+                        ]),
+
+                    Tab::make('Contato e Endereço')
+                        ->icon('heroicon-o-map-pin')
+                        ->schema([
+                            Section::make('Contato')
+                                ->columns(12)
+                                ->schema([
+                                    TextInput::make('email')
+                                        ->label('E-mail')
+                                        ->email()
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('phone')
+                                        ->label('Telefone')
+                                        ->maxLength(15)
+                                        ->mask(RawJs::make(<<<'JS'
+                                            $input.length > 14 ? '(99) 99999-9999' : '(99) 9999-9999'
+                                        JS))
+                                        ->stripCharacters(['(', ')', ' ', '-'])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(4),
+
+                                    TextInput::make('mobile')
+                                        ->label('Celular')
+                                        ->maxLength(15)
+                                        ->mask(RawJs::make(<<<'JS'
+                                            '(99) 99999-9999'
+                                        JS))
+                                        ->stripCharacters(['(', ')', ' ', '-'])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(4),
+                                ]),
+
+                            Section::make('Endereço')
+                                ->columns(12)
+                                ->schema([
+                                    TextInput::make('zip_code')
+                                        ->label('CEP')
+                                        ->maxLength(9)
+                                        ->mask(RawJs::make("'99999-999'"))
+                                        ->stripCharacters(['-'])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(2),
+
+                                    TextInput::make('address')
+                                        ->label('Endereço')
+                                        ->maxLength(255)
+                                        ->columnSpan(5),
+
+                                    TextInput::make('number')
+                                        ->label('Número')
+                                        ->maxLength(20)
+                                        ->columnSpan(2),
+
+                                    TextInput::make('complement')
+                                        ->label('Complemento')
+                                        ->maxLength(255)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('district')
+                                        ->label('Bairro')
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('city')
+                                        ->label('Cidade')
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('state')
+                                        ->label('UF')
+                                        ->maxLength(2)
+                                        ->columnSpan(2),
+                                ]),
+                        ]),
+
+                    Tab::make('Dados Funcionais')
+                        ->icon('heroicon-o-briefcase')
+                        ->schema([
+                            Section::make('Lotação e cadastro funcional')
+                                ->columns(12)
+                                ->schema([
+                                    Select::make('department_id')
+                                        ->label('Departamento')
+                                        ->options(fn () => Department::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(3),
+
+                                    Select::make('cost_center_id')
+                                        ->label('Centro de Custo')
+                                        ->options(fn () => CostCenter::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(3),
+
+                                    Select::make('job_role_id')
+                                        ->label('Cargo')
+                                        ->options(fn () => JobRole::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(3),
+
+                                    Select::make('cbo_code_id')
+                                        ->label('CBO')
+                                        ->options(fn () => CboCode::query()
+                                            ->orderBy('code')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(3),
+
+                                    Select::make('labor_union_id')
+                                        ->label('Sindicato')
+                                        ->options(fn () => LaborUnion::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(4),
+
+                                    Select::make('work_shift_id')
+                                        ->label('Jornada de Trabalho')
+                                        ->options(fn () => WorkShift::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(4),
+
+                                    DatePicker::make('admission_date')
+                                        ->label('Data de Admissão')
+                                        ->columnSpan(2),
+
+                                    DatePicker::make('termination_date')
+                                        ->label('Data de Desligamento')
+                                        ->columnSpan(2),
+                                ]),
+
+                            Section::make('Remuneração e contrato')
+                                ->columns(12)
+                                ->schema([
+                                    TextInput::make('salary')
+                                        ->label('Salário Base')
+                                        ->required()
+                                        ->mask(RawJs::make('$money($input, ",", ".", 2)'))
+                                        ->prefix('R$ ')
+                                        ->dehydrateStateUsing(fn ($state) => self::moneyToDatabase($state))
+                                        ->formatStateUsing(fn ($state) => self::moneyFromDatabase($state))
+                                        ->columnSpan(3),
+
+                                    TextInput::make('salary_advance_amount')
+                                        ->label('Adiantamento Salarial')
+                                        ->mask(RawJs::make('$money($input, ",", ".", 2)'))
+                                        ->prefix('R$ ')
+                                        ->default('0,00')
+                                        ->dehydrateStateUsing(fn ($state) => self::moneyToDatabase($state) ?? 0)
+                                        ->formatStateUsing(fn ($state) => self::moneyFromDatabase($state ?? 0))
+                                        ->columnSpan(3),
+
+                                    Select::make('payment_method')
+                                        ->label('Forma de Pagamento')
+                                        ->options([
+                                            'pix' => 'PIX',
+                                            'transfer' => 'Transferência',
+                                            'bank_deposit' => 'Depósito Bancário',
+                                            'cash' => 'Dinheiro',
+                                        ])
+                                        ->columnSpan(3),
+
+                                    Select::make('contract_type_id')
+                                        ->label('Tipo de Contrato')
+                                        ->options(fn () => ContractType::query()
+                                            ->where('is_active', true)
+                                            ->orderBy('sort_order')
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->required()
+                                        ->live()
+                                        ->columnSpan(3)
+                                        ->afterStateUpdated(function (?string $state, Set $set): void {
+                                            $rules = ContractProcessingRuleService::getByContractTypeId(
+                                                $state ? (int) $state : null
+                                            );
+
+                                            $hasFgts = (bool) ($rules['has_fgts'] ?? false);
+                                            $hasInss = (bool) ($rules['has_inss'] ?? true);
+
+                                            $set('processing_type', $rules['processing_type'] ?? 'payroll');
+                                            $set('generates_payroll', (bool) ($rules['generates_payroll'] ?? true));
+                                            $set('generates_accounts_payable', (bool) ($rules['generates_accounts_payable'] ?? false));
+                                            $set('allows_payslip', (bool) ($rules['allows_payslip'] ?? true));
+
+                                            $set('has_fgts', $hasFgts);
+                                            $set('fgts_rate', $hasFgts ? (float) ($rules['fgts_rate'] ?? 8) : 0);
+
+                                            $set('has_inss', $hasInss);
+                                            $set('inss_optional', (bool) ($rules['inss_optional'] ?? false));
+                                            $set('with_inss', $hasInss ? (bool) ($rules['with_inss'] ?? true) : false);
+
+                                            $set('has_irrf', (bool) ($rules['has_irrf'] ?? true));
+                                        }),
+                                ]),
+                        ]),
+
+                    Tab::make('Banco / PIX')
+                        ->icon('heroicon-o-building-library')
+                        ->schema([
+                            Section::make('Dados bancários')
+                                ->columns(12)
+                                ->schema([
+                                    Select::make('bank_id')
+                                        ->label('Banco')
+                                        ->options(fn () => Bank::query()
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->columnSpan(3),
+
+                                    TextInput::make('bank_agency')
+                                        ->label('Agência')
+                                        ->maxLength(20)
+                                        ->columnSpan(2),
+
+                                    TextInput::make('bank_account')
+                                        ->label('Conta')
+                                        ->maxLength(30)
+                                        ->columnSpan(3),
+
+                                    TextInput::make('bank_account_digit')
+                                        ->label('Dígito')
+                                        ->maxLength(10)
+                                        ->columnSpan(2),
+
+                                    Select::make('bank_account_type')
+                                        ->label('Tipo de Conta')
+                                        ->options([
+                                            'checking' => 'Corrente',
+                                            'savings' => 'Poupança',
+                                            'salary' => 'Salário',
+                                        ])
+                                        ->columnSpan(2),
+                                ]),
+
+                            Section::make('Dados PIX')
+                                ->columns(12)
+                                ->schema([
+                                    Select::make('pix_key_type')
+                                        ->label('Tipo de Chave PIX')
+                                        ->options([
+                                            'cpf' => 'CPF',
+                                            'cnpj' => 'CNPJ',
+                                            'email' => 'E-mail',
+                                            'phone' => 'Telefone',
+                                            'random' => 'Aleatória',
+                                        ])
+                                        ->live()
+                                        ->columnSpan(3)
+                                        ->afterStateUpdated(function (Set $set): void {
+                                            $set('pix_key', null);
+                                            $set('pix_holder_document', null);
+                                        }),
+
+                                    TextInput::make('pix_key')
+                                        ->label('Chave PIX')
+                                        ->maxLength(255)
+                                        ->mask(fn (Get $get) => match ($get('pix_key_type')) {
+                                            'cpf' => RawJs::make("'999.999.999-99'"),
+                                            'cnpj' => RawJs::make("'99.999.999/9999-99'"),
+                                            'phone' => RawJs::make("'(99) 99999-9999'"),
+                                            default => null,
+                                        })
+                                        ->placeholder(fn (Get $get) => match ($get('pix_key_type')) {
+                                            'cpf' => '000.000.000-00',
+                                            'cnpj' => '00.000.000/0000-00',
+                                            'email' => 'email@exemplo.com',
+                                            'phone' => '(00) 00000-0000',
+                                            'random' => 'Chave aleatória',
+                                            default => 'Selecione o tipo de chave',
+                                        })
+                                        ->helperText(fn (Get $get) => match ($get('pix_key_type')) {
+                                            'cpf' => 'Informe a chave PIX no formato CPF.',
+                                            'cnpj' => 'Informe a chave PIX no formato CNPJ.',
+                                            'email' => 'Informe uma chave PIX do tipo e-mail.',
+                                            'phone' => 'Informe a chave PIX no formato celular.',
+                                            'random' => 'Informe a chave aleatória completa.',
+                                            default => 'Escolha o tipo de chave para aplicar a máscara correta.',
+                                        })
+                                        ->stripCharacters(['.', '-', '/', '(', ')', ' '])
+                                        ->dehydrateStateUsing(function ($state, Get $get) {
+                                            return match ($get('pix_key_type')) {
+                                                'cpf', 'cnpj', 'phone' => self::digits($state),
+                                                default => $state,
+                                            };
+                                        })
+                                        ->columnSpan(3),
+
+                                    TextInput::make('pix_holder_name')
+                                        ->label('Titular da Chave PIX')
+                                        ->maxLength(255)
+                                        ->columnSpan(4),
+
+                                    TextInput::make('pix_holder_document')
+                                        ->label('Documento do Titular')
+                                        ->maxLength(18)
+                                        ->mask(fn (Get $get) => match ($get('pix_key_type')) {
+                                            'cnpj' => RawJs::make("'99.999.999/9999-99'"),
+                                            default => RawJs::make("'999.999.999-99'"),
+                                        })
+                                        ->placeholder(fn (Get $get) => $get('pix_key_type') === 'cnpj'
+                                            ? '00.000.000/0000-00'
+                                            : '000.000.000-00')
+                                        ->helperText('A máscara muda conforme o tipo de documento esperado.')
+                                        ->stripCharacters(['.', '-', '/', '(', ')', ' '])
+                                        ->dehydrateStateUsing(fn ($state) => self::digits($state))
+                                        ->columnSpan(2),
+                                ]),
+                        ]),
+
+                    Tab::make('Processamento')
+                        ->icon('heroicon-o-cog-6-tooth')
+                        ->schema([
+                            Section::make('Regras automáticas do vínculo')
+                                ->description('Esses campos podem ser ajustados manualmente quando necessário.')
+                                ->columns(12)
+                                ->schema([
+                                    Select::make('processing_type')
+                                        ->label('Tipo de Processamento')
+                                        ->options(ContractProcessingRuleService::processingTypeOptions())
+                                        ->default('payroll')
+                                        ->required()
+                                        ->dehydrated(true)
+                                        ->columnSpan(3),
+
+                                    Toggle::make('generates_payroll')
+                                        ->label('Gera Folha')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+
+                                    Toggle::make('generates_accounts_payable')
+                                        ->label('Gera Contas a Pagar')
+                                        ->inline(false)
+                                        ->default(false)
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+
+                                    Toggle::make('allows_payslip')
+                                        ->label('Permite Holerite / Comprovante')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+                                        Toggle::make('has_fgts')
+                                            ->label('Tem FGTS')
+                                            ->inline(false)
+                                            ->default(true)
+                                            ->live()
+                                            ->afterStateHydrated(function (Set $set, $state, ?\App\Models\Employee $record) {
+                                                if (! $state) {
+                                                    $set('fgts_rate', 0);
+                                                    return;
+                                                }
+
+                                                $set('fgts_rate', $record?->fgts_rate ?? 8);
+                                            })
+                                            ->afterStateUpdated(function (Set $set, $state, Get $get): void {
+                                                if (! $state) {
+                                                    $set('fgts_rate', 0);
+                                                    return;
+                                                }
+
+                                                $current = $get('fgts_rate');
+
+                                                $set('fgts_rate', filled($current) ? $current : 8);
+                                            })
+                                            ->dehydrated(true)
+                                            ->columnSpan(2),
+
+                                        TextInput::make('fgts_rate')
+    ->label('Alíquota FGTS (%)')
+    ->numeric()
+    ->default(8)
+    ->disabled(fn (Get $get) => ! $get('has_fgts'))
+    ->dehydrated(true)
+    ->dehydrateStateUsing(function ($state, Get $get) {
+        return $get('has_fgts') ? ((float) ($state ?: 8)) : 0;
+    })
+    ->columnSpan(2),
+
+                                    Toggle::make('has_inss')
+                                        ->label('Tem INSS')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->live()
+                                        ->dehydrated(true)
+                                        ->afterStateUpdated(function (Set $set, $state): void {
+                                            if (! $state) {
+                                                $set('inss_optional', false);
+                                                $set('with_inss', false);
+                                            }
+                                        })
+                                        ->columnSpan(2),
+
+                                    Toggle::make('inss_optional')
+                                        ->label('INSS Opcional')
+                                        ->inline(false)
+                                        ->default(false)
+                                        ->visible(fn (Get $get) => (bool) $get('has_inss'))
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+
+                                    Toggle::make('with_inss')
+                                        ->label('Reter INSS')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->visible(fn (Get $get) => (bool) $get('has_inss'))
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+
+                                    Toggle::make('has_irrf')
+                                        ->label('Tem IRRF')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->dehydrated(true)
+                                        ->columnSpan(2),
+                                ]),
+                        ]),
+
+                    Tab::make('Observações')
+                        ->icon('heroicon-o-chat-bubble-left-ellipsis')
+                        ->schema([
+                            Section::make('Informações complementares')
+                                ->columns(12)
+                                ->schema([
+                                    Textarea::make('notes')
+                                        ->label('Observações')
+                                        ->rows(6)
+                                        ->columnSpanFull(),
+                                ]),
+                        ]),
+                ])
+                ->persistTabInQueryString(),
+        ]);
+    }
+
+    protected static function digits(?string $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        return preg_replace('/\D+/', '', $value);
+    }
+
+    protected static function moneyToDatabase($state): ?float
+    {
+        if ($state === null || $state === '') {
+            return null;
+        }
+
+        $value = trim((string) $state);
+
+        if (preg_match('/^\d+(\.\d{1,2})?$/', $value)) {
+            return (float) $value;
+        }
+
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+
+        return is_numeric($value) ? (float) $value : null;
+    }
+
+    protected static function moneyFromDatabase($state): ?string
+    {
+        if ($state === null || $state === '') {
+            return null;
+        }
+
+        return number_format((float) $state, 2, ',', '.');
+    }
+}

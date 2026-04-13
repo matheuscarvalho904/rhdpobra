@@ -1,0 +1,286 @@
+<?php
+
+namespace App\Filament\Resources\Employees\Tables;
+
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
+
+class EmployeesTable
+{
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('code')
+                    ->label('Código')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('name')
+                    ->label('Colaborador')
+                    ->searchable()
+                    ->sortable()
+                    ->weight('semiBold')
+                    ->description(fn ($record): ?string => $record->cpf ?: null)
+                    ->wrap(),
+
+                TextColumn::make('company.name')
+                    ->label('Empresa')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('branch.name')
+                    ->label('Filial')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('work.name')
+                    ->label('Obra')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('jobRole.name')
+                    ->label('Cargo')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('contractType.name')
+                    ->label('Contrato')
+                    ->badge()
+                    ->color(fn (?string $state): string => match (mb_strtoupper((string) $state)) {
+                        'CLT' => 'success',
+                        'APRENDIZ' => 'info',
+                        'ESTÁGIO', 'ESTAGIO' => 'warning',
+                        'PESSOA FÍSICA', 'PF', 'AUTÔNOMO', 'AUTONOMO' => 'primary',
+                        'PESSOA JURÍDICA', 'PJ' => 'gray',
+                        default => 'gray',
+                    })
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('processing_type')
+                    ->label('Processamento')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'payroll_clt' => 'Folha CLT',
+                        'payroll_rpa' => 'Folha RPA',
+                        'internship_payment' => 'Estágio',
+                        'accounts_payable' => 'Contas a Pagar',
+                        default => '-',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'payroll_clt' => 'success',
+                        'payroll_rpa' => 'primary',
+                        'internship_payment' => 'warning',
+                        'accounts_payable' => 'gray',
+                        default => 'gray',
+                    })
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('salary')
+                    ->label('Salário Base')
+                    ->sortable()
+                    ->alignEnd()
+                    ->formatStateUsing(fn ($state): string => 'R$ ' . number_format((float) $state, 2, ',', '.'))
+                    ->toggleable(),
+
+                TextColumn::make('salary_advance_amount')
+                    ->label('Adiantamento')
+                    ->alignEnd()
+                    ->formatStateUsing(fn ($state): string => 'R$ ' . number_format((float) ($state ?? 0), 2, ',', '.'))
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('payment_method')
+                    ->label('Pagamento')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'pix' => 'PIX',
+                        'transfer' => 'Transferência',
+                        'bank_deposit' => 'Depósito',
+                        'cash' => 'Dinheiro',
+                        default => '-',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'pix' => 'success',
+                        'transfer' => 'info',
+                        'bank_deposit' => 'warning',
+                        'cash' => 'gray',
+                        default => 'gray',
+                    })
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('admission_date')
+                    ->label('Admissão')
+                    ->date('d/m/Y')
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('termination_date')
+                    ->label('Desligamento')
+                    ->date('d/m/Y')
+                    ->placeholder('-')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'active' => 'Ativo',
+                        'inactive' => 'Inativo',
+                        'terminated' => 'Desligado',
+                        'leave' => 'Afastado',
+                        default => (string) $state,
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'active' => 'success',
+                        'inactive' => 'gray',
+                        'terminated' => 'danger',
+                        'leave' => 'warning',
+                        default => 'gray',
+                    })
+                    ->sortable(),
+
+                IconColumn::make('has_inss')
+                    ->label('INSS')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                IconColumn::make('has_fgts')
+                    ->label('FGTS')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                IconColumn::make('with_inss')
+                    ->label('Retém INSS')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                IconColumn::make('is_active')
+                    ->label('Ativo')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-badge')
+                    ->falseIcon('heroicon-o-x-mark')
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->sortable(),
+
+                TextColumn::make('created_at')
+                    ->label('Cadastro')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->defaultSort('name')
+            ->filters([
+                SelectFilter::make('company_id')
+                    ->label('Empresa')
+                    ->relationship('company', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('branch_id')
+                    ->label('Filial')
+                    ->relationship('branch', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('work_id')
+                    ->label('Obra')
+                    ->relationship('work', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('department_id')
+                    ->label('Departamento')
+                    ->relationship('department', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('job_role_id')
+                    ->label('Cargo')
+                    ->relationship('jobRole', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('contract_type_id')
+                    ->label('Tipo de Contrato')
+                    ->relationship('contractType', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('processing_type')
+                    ->label('Processamento')
+                    ->options([
+                        'payroll_clt' => 'Folha CLT',
+                        'payroll_rpa' => 'Folha RPA',
+                        'internship_payment' => 'Estágio',
+                        'accounts_payable' => 'Contas a Pagar',
+                    ]),
+
+                SelectFilter::make('status')
+                    ->label('Status')
+                    ->options([
+                        'active' => 'Ativo',
+                        'inactive' => 'Inativo',
+                        'terminated' => 'Desligado',
+                        'leave' => 'Afastado',
+                    ]),
+
+                SelectFilter::make('payment_method')
+                    ->label('Forma de Pagamento')
+                    ->options([
+                        'pix' => 'PIX',
+                        'transfer' => 'Transferência',
+                        'bank_deposit' => 'Depósito',
+                        'cash' => 'Dinheiro',
+                    ]),
+
+                TernaryFilter::make('is_active')
+                    ->label('Somente Ativos')
+                    ->placeholder('Todos')
+                    ->trueLabel('Ativos')
+                    ->falseLabel('Inativos'),
+            ])
+            ->filtersFormColumns(3)
+            ->striped()
+            ->paginated([10, 25, 50, 100])
+            ->recordActions([
+                ViewAction::make()
+                    ->label('Visualizar'),
+
+                EditAction::make()
+                    ->label('Editar'),
+
+                DeleteAction::make()
+                    ->label('Excluir'),
+            ])
+            ->emptyStateHeading('Nenhum colaborador encontrado')
+            ->emptyStateDescription('Cadastre colaboradores para começar o controle de folha, vínculos e pagamentos.');
+    }
+}

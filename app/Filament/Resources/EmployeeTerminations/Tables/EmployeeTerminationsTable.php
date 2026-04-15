@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\EmployeeTerminations\Tables;
 
 use App\Services\TerminationProcessingService;
+use App\Services\TerminationReportService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
@@ -17,11 +18,13 @@ class EmployeeTerminationsTable
             ->columns([
                 TextColumn::make('employee.name')
                     ->label('Colaborador')
-                    ->searchable(),
+                    ->searchable()
+                    ->sortable(),
 
                 TextColumn::make('contract.registration_number')
                     ->label('Matrícula')
-                    ->searchable(),
+                    ->searchable()
+                    ->sortable(),
 
                 TextColumn::make('notice_type')
                     ->label('Aviso')
@@ -31,7 +34,8 @@ class EmployeeTerminationsTable
                         'indemnified' => 'Indenizado',
                         'home' => 'Em Casa',
                         default => '-',
-                    }),
+                    })
+                    ->sortable(),
 
                 TextColumn::make('status')
                     ->label('Status')
@@ -42,31 +46,37 @@ class EmployeeTerminationsTable
                         'closed' => 'Fechado',
                         'cancelled' => 'Cancelado',
                         default => (string) $state,
-                    }),
+                    })
+                    ->sortable(),
 
                 TextColumn::make('termination_date')
                     ->label('Desligamento')
-                    ->date('d/m/Y'),
+                    ->date('d/m/Y')
+                    ->sortable(),
 
                 TextColumn::make('projected_end_date')
                     ->label('Projeção')
                     ->date('d/m/Y')
-                    ->placeholder('-'),
+                    ->placeholder('-')
+                    ->sortable(),
 
                 TextColumn::make('notice_amount')
                     ->label('Aviso')
                     ->money('BRL')
                     ->placeholder('-')
-                    ->alignEnd(),
+                    ->alignEnd()
+                    ->sortable(),
 
                 TextColumn::make('termination_amount')
                     ->label('Líquido Rescisão')
                     ->money('BRL')
                     ->placeholder('-')
-                    ->alignEnd(),
+                    ->alignEnd()
+                    ->sortable(),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->label('Editar'),
 
                 Action::make('calculate_termination')
                     ->label('Calcular Rescisão')
@@ -90,6 +100,14 @@ class EmployeeTerminationsTable
                         }
                     })
                     ->visible(fn ($record) => in_array($record->status, ['draft', 'in_progress'], true)),
+
+                Action::make('print_termination')
+                    ->label('Gerar PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('gray')
+                    ->action(function ($record, TerminationReportService $service) {
+                        return $service->stream($record);
+                    }),
 
                 Action::make('close_termination')
                     ->label('Fechar Desligamento')

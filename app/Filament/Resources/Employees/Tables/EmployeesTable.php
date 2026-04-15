@@ -2,9 +2,23 @@
 
 namespace App\Filament\Resources\Employees\Tables;
 
+use App\Models\Branch;
+use App\Models\Company;
+use App\Models\ContractType;
+use App\Models\CostCenter;
+use App\Models\Department;
+use App\Models\JobRole;
+use App\Models\Work;
+use App\Models\WorkShift;
+use App\Services\EmployeeRehireService;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -143,6 +157,7 @@ class EmployeesTable
                         'inactive' => 'Inativo',
                         'terminated' => 'Desligado',
                         'leave' => 'Afastado',
+                        'em_aviso' => 'Em Aviso',
                         default => (string) $state,
                     })
                     ->color(fn (?string $state): string => match ($state) {
@@ -150,6 +165,7 @@ class EmployeesTable
                         'inactive' => 'gray',
                         'terminated' => 'danger',
                         'leave' => 'warning',
+                        'em_aviso' => 'warning',
                         default => 'gray',
                     })
                     ->sortable(),
@@ -250,6 +266,7 @@ class EmployeesTable
                         'inactive' => 'Inativo',
                         'terminated' => 'Desligado',
                         'leave' => 'Afastado',
+                        'em_aviso' => 'Em Aviso',
                     ]),
 
                 SelectFilter::make('payment_method')
@@ -276,6 +293,81 @@ class EmployeesTable
 
                 EditAction::make()
                     ->label('Editar'),
+
+                Action::make('rehire')
+                    ->label('Recontratar')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('success')
+                    ->form([
+                        DatePicker::make('admission_date')
+                            ->label('Data de Admissão')
+                            ->required(),
+
+                        TextInput::make('salary')
+                            ->label('Salário')
+                            ->numeric()
+                            ->required()
+                            ->prefix('R$'),
+
+                        Select::make('company_id')
+                            ->label('Empresa')
+                            ->options(fn () => Company::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable()
+                            ->required(),
+
+                        Select::make('branch_id')
+                            ->label('Filial')
+                            ->options(fn () => Branch::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('work_id')
+                            ->label('Obra')
+                            ->options(fn () => Work::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('department_id')
+                            ->label('Departamento')
+                            ->options(fn () => Department::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('job_role_id')
+                            ->label('Cargo')
+                            ->options(fn () => JobRole::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('cost_center_id')
+                            ->label('Centro de Custo')
+                            ->options(fn () => CostCenter::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('contract_type_id')
+                            ->label('Tipo de Contrato')
+                            ->options(fn () => ContractType::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+
+                        Select::make('work_shift_id')
+                            ->label('Jornada')
+                            ->options(fn () => WorkShift::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                            ->searchable(),
+                    ])
+                    ->action(function (array $data, $record, EmployeeRehireService $service) {
+                        try {
+                            $contract = $service->rehire($record, $data);
+
+                            Notification::make()
+                                ->title('Colaborador recontratado com sucesso.')
+                                ->body('Nova matrícula: ' . $contract->registration_number)
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Erro ao recontratar.')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    })
+                    ->visible(fn ($record) => in_array($record->status, ['terminated', 'inactive'], true)),
 
                 DeleteAction::make()
                     ->label('Excluir'),

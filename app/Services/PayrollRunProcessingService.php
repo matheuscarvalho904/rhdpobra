@@ -97,10 +97,20 @@ class PayrollRunProcessingService
     protected function processPayrollEmployee(Employee $employee, PayrollRun $payrollRun): array
     {
         $competency = $payrollRun->payrollCompetency;
+        $contract = $employee->currentContract;
+
+        if (! $contract) {
+            return [];
+        }
+
+        $salary = (float) ($contract->salary ?? $employee->salary ?? 0);
 
         return $this->payrollCalculationService->calculate(
             $employee,
             [
+                'employee_contract_id' => $contract->id,
+                'salary' => $salary,
+
                 'payroll_competency_id' => $payrollRun->payroll_competency_id,
                 'run_type' => $payrollRun->run_type,
 
@@ -241,11 +251,17 @@ class PayrollRunProcessingService
                 'work',
                 'contractType',
                 'jobRole',
+                'currentContract',
             ])
             ->where('is_active', true)
-            ->when($payrollRun->company_id, fn ($q) => $q->where('company_id', $payrollRun->company_id))
-            ->when($payrollRun->branch_id, fn ($q) => $q->where('branch_id', $payrollRun->branch_id))
-            ->when($payrollRun->work_id, fn ($q) => $q->where('work_id', $payrollRun->work_id))
+            ->whereHas('currentContract', function ($query) use ($payrollRun) {
+                $query
+                    ->where('is_current', true)
+                    ->whereIn('status', ['ativo', 'em_aviso'])
+                    ->when($payrollRun->company_id, fn ($q) => $q->where('company_id', $payrollRun->company_id))
+                    ->when($payrollRun->branch_id, fn ($q) => $q->where('branch_id', $payrollRun->branch_id))
+                    ->when($payrollRun->work_id, fn ($q) => $q->where('work_id', $payrollRun->work_id));
+            })
             ->where(function ($query) use ($payrollRun) {
                 match ($payrollRun->run_type) {
                     'payroll_clt' => $query

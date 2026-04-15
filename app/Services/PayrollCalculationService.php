@@ -14,51 +14,73 @@ use InvalidArgumentException;
 class PayrollCalculationService
 {
     public function calculateEmployee(Employee $employee, array $context = []): array
-    {
-        $competencyId = $context['payroll_competency_id'] ?? null;
-        $processingType = $employee->processing_type ?: 'payroll_clt';
+{
+    $competencyId = $context['payroll_competency_id'] ?? null;
+    $contract = $employee->currentContract;
 
-        $fixedEvents = $this->getEmployeeFixedEvents($employee);
-        $variableEvents = $this->getEmployeeVariableEvents($employee, $competencyId);
-        $salaryAdvanceDiscount = $this->getSalaryAdvanceDiscount($employee, $competencyId);
-
-        return match ($processingType) {
-            'payroll_clt' => $this->processClt(
-                employee: $employee,
-                context: $context,
-                fixedEvents: $fixedEvents,
-                variableEvents: $variableEvents,
-                salaryAdvanceDiscount: $salaryAdvanceDiscount,
-            ),
-            'payroll_rpa' => $this->processRpa(
-                employee: $employee,
-                context: $context,
-                fixedEvents: $fixedEvents,
-                variableEvents: $variableEvents,
-                salaryAdvanceDiscount: $salaryAdvanceDiscount,
-            ),
-            'internship_payment' => $this->processInternship(
-                employee: $employee,
-                context: $context,
-                fixedEvents: $fixedEvents,
-                variableEvents: $variableEvents,
-                salaryAdvanceDiscount: $salaryAdvanceDiscount,
-            ),
-            'accounts_payable' => $this->processAccountsPayable(
-                employee: $employee,
-                context: $context,
-                fixedEvents: $fixedEvents,
-                variableEvents: $variableEvents,
-                salaryAdvanceDiscount: $salaryAdvanceDiscount,
-            ),
-            default => throw new InvalidArgumentException("Tipo de processamento inválido: {$processingType}"),
-        };
+    if (! $contract) {
+        return [];
     }
 
-    public function calculate(Employee $employee, array $context = []): array
-    {
-        return $this->calculateEmployee($employee, $context);
+    if (! in_array($contract->status, ['ativo', 'em_aviso'], true)) {
+        return [];
     }
+
+    $processingType = $context['processing_type']
+        ?? $context['run_type']
+        ?? $employee->processing_type
+        ?? 'payroll_clt';
+
+    $context['employee_contract_id'] = $context['employee_contract_id'] ?? $contract->id;
+    $context['salary'] = $context['salary'] ?? (float) ($contract->salary ?? $employee->salary ?? 0);
+    $context['admission_date'] = $context['admission_date'] ?? optional($contract->admission_date)?->format('Y-m-d');
+    $context['termination_date'] = $context['termination_date'] ?? optional($contract->termination_date)?->format('Y-m-d');
+
+    $fixedEvents = $this->getEmployeeFixedEvents($employee);
+    $variableEvents = $this->getEmployeeVariableEvents($employee, $competencyId);
+    $salaryAdvanceDiscount = $this->getSalaryAdvanceDiscount($employee, $competencyId);
+
+    return match ($processingType) {
+        'payroll_clt' => $this->processClt(
+            employee: $employee,
+            context: $context,
+            fixedEvents: $fixedEvents,
+            variableEvents: $variableEvents,
+            salaryAdvanceDiscount: $salaryAdvanceDiscount,
+        ),
+
+        'payroll_rpa' => $this->processRpa(
+            employee: $employee,
+            context: $context,
+            fixedEvents: $fixedEvents,
+            variableEvents: $variableEvents,
+            salaryAdvanceDiscount: $salaryAdvanceDiscount,
+        ),
+
+        'internship_payment' => $this->processInternship(
+            employee: $employee,
+            context: $context,
+            fixedEvents: $fixedEvents,
+            variableEvents: $variableEvents,
+            salaryAdvanceDiscount: $salaryAdvanceDiscount,
+        ),
+
+        'accounts_payable' => $this->processAccountsPayable(
+            employee: $employee,
+            context: $context,
+            fixedEvents: $fixedEvents,
+            variableEvents: $variableEvents,
+            salaryAdvanceDiscount: $salaryAdvanceDiscount,
+        ),
+
+        default => throw new InvalidArgumentException("Tipo de processamento inválido: {$processingType}"),
+    };
+}
+
+public function calculate(Employee $employee, array $context = []): array
+{
+    return $this->calculateEmployee($employee, $context);
+}
 
     protected function processClt(
         Employee $employee,
@@ -552,105 +574,110 @@ class PayrollCalculationService
     }
 
     protected function buildPayrollItems(
-        Employee $employee,
-        float $baseSalary,
-        array $salaryData,
-        Collection $fixedEvents,
-        Collection $variableEvents,
-        float $inssAmount,
-        float $irrfAmount,
-        float $fgtsAmount,
-        float $salaryAdvanceDiscount
-    ): array {
-        $items = [];
+    Employee $employee,
+    float $baseSalary,
+    array $salaryData,
+    Collection $fixedEvents,
+    Collection $variableEvents,
+    float $inssAmount,
+    float $irrfAmount,
+    float $fgtsAmount,
+    float $salaryAdvanceDiscount
+): array {
+    $items = [];
 
-        if ($baseSalary > 0) {
-            $salaryDescription = $salaryData['is_proportional']
-                ? sprintf(
-                    'Salário Base Proporcional (%d/%d)',
-                    (int) $salaryData['worked_days'],
-                    (int) $salaryData['reference_days']
-                )
-                : 'Salário Base';
+    // 🔥 SALÁRIO BASE
+    if ($baseSalary > 0) {
+        $salaryDescription = $salaryData['is_proportional']
+            ? sprintf(
+                'Salário Base Proporcional (%d/%d)',
+                (int) $salaryData['worked_days'],
+                (int) $salaryData['reference_days']
+            )
+            : 'Salário Base';
 
-            $items[] = [
-                'code' => 'SALARIO',
-                'description' => $salaryDescription,
-                'type' => 'provento',
-                'amount' => $this->money($baseSalary),
-                'reference' => $salaryData['is_proportional']
-                    ? ((int) $salaryData['worked_days'] . '/' . (int) $salaryData['reference_days'])
-                    : (string) ($salaryData['reference_days'] ?: 30),
-                'source' => 'base_salary',
-            ];
-        }
-
-        foreach ($this->mergeUniqueEvents($fixedEvents, $variableEvents) as $event) {
-            $type = $this->normalizeEventType($event->payrollEvent?->type ?? $event->type ?? null);
-            $rawAmount = (float) ($event->amount ?? 0);
-
-            if ($type === null || $rawAmount == 0.0 || $this->isSalaryDuplicateEvent($event)) {
-                continue;
-            }
-
-            $items[] = [
-                'code' => $event->payrollEvent?->code ?? ($event instanceof EmployeeFixedEvent ? 'FIXO' : 'VAR'),
-                'description' => $event->payrollEvent?->name ?? 'Evento',
-                'type' => $type === 'informativo' ? 'informativo' : $type,
-                'reference' => $this->resolveEventReference($event),
-                'amount' => $this->money(abs($rawAmount)),
-                'source' => $event instanceof EmployeeFixedEvent ? 'fixed_event' : 'variable_event',
-                'payroll_event_id' => $event->payroll_event_id,
-            ];
-        }
-
-        if ($salaryAdvanceDiscount > 0) {
-            $items[] = [
-                'code' => 'ADIANT',
-                'description' => 'Desconto de Adiantamento',
-                'type' => 'desconto',
-                'amount' => $this->money($salaryAdvanceDiscount),
-                'reference' => null,
-                'source' => 'salary_advance',
-            ];
-        }
-
-        if ($inssAmount > 0) {
-            $items[] = [
-                'code' => 'INSS',
-                'description' => 'Desconto INSS',
-                'type' => 'desconto',
-                'amount' => $this->money($inssAmount),
-                'reference' => null,
-                'source' => 'calculation',
-            ];
-        }
-
-        if ($irrfAmount > 0) {
-            $items[] = [
-                'code' => 'IRRF',
-                'description' => 'Desconto IRRF',
-                'type' => 'desconto',
-                'amount' => $this->money($irrfAmount),
-                'reference' => null,
-                'source' => 'calculation',
-            ];
-        }
-
-        if ($fgtsAmount > 0) {
-            $items[] = [
-                'code' => 'FGTS',
-                'description' => 'FGTS (Depósito)',
-                'type' => 'informativo',
-                'amount' => $this->money($fgtsAmount),
-                'reference' => null,
-                'source' => 'calculation',
-            ];
-        }
-
-        return array_values($items);
+        $items[] = [
+            'code' => 'SALARIO',
+            'description' => $salaryDescription,
+            'type' => 'provento',
+            'amount' => $this->money($baseSalary),
+            'reference' => $salaryData['is_proportional']
+                ? 0 // 🔥 NÃO SALVAR STRING
+                : (float) ($salaryData['reference_days'] ?: 30),
+            'source' => 'base_salary',
+        ];
     }
 
+    // 🔥 EVENTOS
+    foreach ($this->mergeUniqueEvents($fixedEvents, $variableEvents) as $event) {
+        $type = $this->normalizeEventType($event->payrollEvent?->type ?? $event->type ?? null);
+        $rawAmount = (float) ($event->amount ?? 0);
+
+        if ($type === null || $rawAmount == 0.0 || $this->isSalaryDuplicateEvent($event)) {
+            continue;
+        }
+
+        $items[] = [
+            'code' => $event->payrollEvent?->code ?? ($event instanceof EmployeeFixedEvent ? 'FIXO' : 'VAR'),
+            'description' => $event->payrollEvent?->name ?? 'Evento',
+            'type' => $type === 'informativo' ? 'informativo' : $type,
+            'reference' => $this->normalizeReferenceNumber($this->resolveEventReference($event)),
+            'amount' => $this->money(abs($rawAmount)),
+            'source' => $event instanceof EmployeeFixedEvent ? 'fixed_event' : 'variable_event',
+            'payroll_event_id' => $event->payroll_event_id,
+        ];
+    }
+
+    // 🔥 ADIANTAMENTO
+    if ($salaryAdvanceDiscount > 0) {
+        $items[] = [
+            'code' => 'ADIANT',
+            'description' => 'Desconto de Adiantamento',
+            'type' => 'desconto',
+            'amount' => $this->money($salaryAdvanceDiscount),
+            'reference' => 0, // 🔥 CORREÇÃO
+            'source' => 'salary_advance',
+        ];
+    }
+
+    // 🔥 INSS
+    if ($inssAmount > 0) {
+        $items[] = [
+            'code' => 'INSS',
+            'description' => 'Desconto INSS',
+            'type' => 'desconto',
+            'amount' => $this->money($inssAmount),
+            'reference' => 0, // 🔥 CORREÇÃO
+            'source' => 'calculation',
+        ];
+    }
+
+    // 🔥 IRRF
+    if ($irrfAmount > 0) {
+        $items[] = [
+            'code' => 'IRRF',
+            'description' => 'Desconto IRRF',
+            'type' => 'desconto',
+            'amount' => $this->money($irrfAmount),
+            'reference' => 0, // 🔥 CORREÇÃO
+            'source' => 'calculation',
+        ];
+    }
+
+    // 🔥 FGTS
+    if ($fgtsAmount > 0) {
+        $items[] = [
+            'code' => 'FGTS',
+            'description' => 'FGTS (Depósito)',
+            'type' => 'informativo',
+            'amount' => $this->money($fgtsAmount),
+            'reference' => 0, // 🔥 CORREÇÃO
+            'source' => 'calculation',
+        ];
+    }
+
+    return array_values($items);
+}
     protected function resolveEventReference(object $event): ?string
 {
     $eventName = mb_strtolower((string) ($event->payrollEvent?->name ?? ''));
@@ -746,9 +773,13 @@ class PayrollCalculationService
 
     protected function resolveBaseSalaryData(Employee $employee, array $context, ?bool $prorate = null): array
     {
-        $fullSalary = isset($context['base_salary'])
-            ? $this->money((float) $context['base_salary'])
-            : $this->money((float) ($employee->salary ?? 0));
+        $fullSalary = isset($context['salary'])
+        ? $this->money((float) $context['salary'])
+        : $this->money((float) (
+            $employee->currentContract?->salary
+            ?? $employee->salary
+            ?? 0
+        ));
 
         $shouldProrate = $prorate ?? (bool) ($context['prorate_salary_on_admission'] ?? true);
 
@@ -1174,4 +1205,27 @@ class PayrollCalculationService
     {
         return round($value, 2);
     }
+
+    protected function normalizeReferenceNumber(mixed $reference): float
+{
+    if ($reference === null || $reference === '') {
+        return 0;
+    }
+
+    if (is_numeric($reference)) {
+        return round((float) $reference, 2);
+    }
+
+    $value = trim((string) $reference);
+
+    // 🔥 evita erro com "30/30"
+    if (str_contains($value, '/')) {
+        return 0;
+    }
+
+    $value = str_replace('.', '', $value);
+    $value = str_replace(',', '.', $value);
+
+    return is_numeric($value) ? round((float) $value, 2) : 0;
+}
 }

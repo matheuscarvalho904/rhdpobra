@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Services\ContractProcessingRuleService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
 
@@ -254,33 +256,32 @@ class Employee extends Model
     }
 
     public function applyContractRules(): void
-{
-    $rules = ContractProcessingRuleService::getByContractTypeId($this->contract_type_id);
+    {
+        $rules = ContractProcessingRuleService::getByContractTypeId($this->contract_type_id);
 
-    $this->processing_type = $rules['processing_type'] ?? 'payroll_clt';
-    $this->generates_payroll = (bool) ($rules['generates_payroll'] ?? true);
-    $this->generates_accounts_payable = (bool) ($rules['generates_accounts_payable'] ?? false);
-    $this->allows_payslip = (bool) ($rules['allows_payslip'] ?? true);
+        $this->processing_type = $rules['processing_type'] ?? 'payroll_clt';
+        $this->generates_payroll = (bool) ($rules['generates_payroll'] ?? true);
+        $this->generates_accounts_payable = (bool) ($rules['generates_accounts_payable'] ?? false);
+        $this->allows_payslip = (bool) ($rules['allows_payslip'] ?? true);
 
-    $this->has_fgts = (bool) ($rules['has_fgts'] ?? false);
-    $this->has_inss = (bool) ($rules['has_inss'] ?? true);
-    $this->has_irrf = (bool) ($rules['has_irrf'] ?? true);
+        $this->has_fgts = (bool) ($rules['has_fgts'] ?? false);
+        $this->has_inss = (bool) ($rules['has_inss'] ?? true);
+        $this->has_irrf = (bool) ($rules['has_irrf'] ?? true);
 
-    // ✅ CORREÇÃO DEFINITIVA
-    $this->fgts_rate = $this->has_fgts
-        ? (isset($rules['fgts_rate']) && $rules['fgts_rate'] !== null
-            ? (float) $rules['fgts_rate']
-            : 8.00)
-        : 0.00;
+        $this->fgts_rate = $this->has_fgts
+            ? (isset($rules['fgts_rate']) && $rules['fgts_rate'] !== null
+                ? (float) $rules['fgts_rate']
+                : 8.00)
+            : 0.00;
 
-    $this->inss_optional = (bool) ($rules['inss_optional'] ?? false);
+        $this->inss_optional = (bool) ($rules['inss_optional'] ?? false);
 
-    if (! $this->inss_optional) {
-        $this->with_inss = (bool) ($rules['with_inss'] ?? true);
-    } elseif ($this->with_inss === null) {
-        $this->with_inss = true;
+        if (! $this->inss_optional) {
+            $this->with_inss = (bool) ($rules['with_inss'] ?? true);
+        } elseif ($this->with_inss === null) {
+            $this->with_inss = true;
+        }
     }
-}
 
     /*
     |--------------------------------------------------------------------------
@@ -316,6 +317,32 @@ class Employee extends Model
     public function hasPix(): bool
     {
         return ! empty($this->pix_key);
+    }
+
+    public function hasPayrollEligibleContract(): bool
+    {
+        $contract = $this->currentContract;
+
+        if (! $contract) {
+            return false;
+        }
+
+        return in_array($contract->status, ['ativo', 'em_aviso'], true);
+    }
+
+    public function currentContractStatus(): ?string
+    {
+        return $this->currentContract?->status;
+    }
+
+    public function isInNotice(): bool
+    {
+        return $this->currentContractStatus() === 'em_aviso';
+    }
+
+    public function isTerminatedByContract(): bool
+    {
+        return $this->currentContractStatus() === 'desligado';
     }
 
     public function getDisplayDocumentAttribute(): ?string
@@ -452,5 +479,21 @@ class Employee extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function contracts(): HasMany
+    {
+        return $this->hasMany(EmployeeContract::class);
+    }
+
+    public function currentContract(): HasOne
+    {
+        return $this->hasOne(EmployeeContract::class)
+            ->where('is_current', true);
+    }
+
+    public function terminations(): HasMany
+    {
+        return $this->hasMany(EmployeeTermination::class);
     }
 }

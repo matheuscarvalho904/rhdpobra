@@ -65,6 +65,6 @@ class TerminationReportService
     {
         $employeeName = str($termination->employee?->name ?? 'colaborador')->slug();
 
-        return "rescisao-{$employeeName}-{$termination->id}.pdf";
+        return "rescisao-premium-{$employeeName}-{$termination->id}.pdf";
     }
 }

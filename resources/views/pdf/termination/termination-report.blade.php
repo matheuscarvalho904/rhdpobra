@@ -1,260 +1,160 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <title>Relatório de Rescisão</title>
-    <style>
-        @page { margin: 20px; }
+<meta charset="UTF-8">
+<title>Rescisão</title>
 
-        * {
-            box-sizing: border-box;
-            font-family: DejaVu Sans, sans-serif;
-        }
+<style>
+@page { margin: 10px; }
 
-        body {
-            font-size: 11px;
-            color: #111827;
-            margin: 0;
-            padding: 0;
-        }
+body {
+    font-family: DejaVu Sans, sans-serif;
+    font-size: 9px;
+    margin: 0;
+}
 
-        h1, h2, h3, p {
-            margin: 0;
-            padding: 0;
-        }
+.via {
+    width: 100%;
+    height: 49%;
+    border: 1px solid #000;
+    padding: 8px;
+    margin-bottom: 6px;
+}
 
-        .header {
-            margin-bottom: 18px;
-        }
+.header {
+    border-bottom: 1px solid #000;
+    margin-bottom: 6px;
+}
 
-        .title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 4px;
-        }
+.title {
+    font-size: 12px;
+    font-weight: bold;
+}
 
-        .subtitle {
-            font-size: 11px;
-            color: #4b5563;
-        }
+.subtitle {
+    font-size: 9px;
+}
 
-        .box {
-            border: 1px solid #cbd5e1;
-            margin-bottom: 14px;
-        }
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
 
-        .box-title {
-            background: #e2e8f0;
-            padding: 6px 8px;
-            font-weight: bold;
-            font-size: 12px;
-        }
+td, th {
+    border: 1px solid #000;
+    padding: 3px;
+}
 
-        .box-body {
-            padding: 8px;
-        }
+th {
+    background: #eee;
+}
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
+.right { text-align: right; }
+.center { text-align: center; }
 
-        th, td {
-            border: 1px solid #cbd5e1;
-            padding: 6px 8px;
-            vertical-align: middle;
-        }
+.summary {
+    font-weight: bold;
+}
 
-        th {
-            background: #f1f5f9;
-            text-align: left;
-        }
+.net {
+    background: #dbeafe;
+    font-size: 10px;
+    font-weight: bold;
+}
 
-        .grid-info td {
-            width: 25%;
-        }
+.signature {
+    margin-top: 20px;
+    text-align: center;
+}
 
-        .right {
-            text-align: right;
-        }
+.line {
+    margin-top: 30px;
+    border-top: 1px solid #000;
+}
+</style>
 
-        .center {
-            text-align: center;
-        }
-
-        .bold {
-            font-weight: bold;
-        }
-
-        .summary td {
-            font-weight: bold;
-        }
-
-        .net {
-            background: #dbeafe;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .mt {
-            margin-top: 10px;
-        }
-
-        .small {
-            font-size: 10px;
-            color: #475569;
-        }
-
-        .signature {
-            margin-top: 28px;
-        }
-
-        .signature-line {
-            margin-top: 42px;
-            border-top: 1px solid #111827;
-            width: 280px;
-            padding-top: 6px;
-            text-align: center;
-        }
-    </style>
 </head>
 <body>
-    @php
-        $employeeName = $employee?->name ?? '-';
-        $employeeCpf = $employee?->cpf ?? '-';
-        $companyName = $company?->name ?? '-';
-        $branchName = $branch?->name ?? '-';
-        $workName = $work?->name ?? '-';
-        $jobRoleName = $jobRole?->name ?? '-';
-        $registrationNumber = $contract?->registration_number ?? '-';
 
-        $formatCpf = function (?string $value): string {
-            $digits = preg_replace('/\D+/', '', (string) $value);
-
-            if (strlen($digits) !== 11) {
-                return (string) $value;
-            }
-
-            return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $digits);
-        };
-    @endphp
+@for($i = 1; $i <= 2; $i++)
+<div class="via">
 
     <div class="header">
-        <div class="title">Relatório de Rescisão</div>
+        <div class="title">
+            Termo de Rescisão — {{ $i === 1 ? 'Via Empresa' : 'Via Colaborador' }}
+        </div>
         <div class="subtitle">
-            Demonstrativo de verbas rescisórias
+            {{ $company?->name ?? '-' }}
         </div>
     </div>
 
-    <div class="box">
-        <div class="box-title">Dados do Colaborador</div>
-        <div class="box-body">
-            <table class="grid-info">
-                <tr>
-                    <td><span class="bold">Colaborador:</span> {{ $employeeName }}</td>
-                    <td><span class="bold">CPF:</span> {{ $formatCpf($employeeCpf) }}</td>
-                    <td><span class="bold">Matrícula:</span> {{ $registrationNumber }}</td>
-                    <td><span class="bold">Cargo:</span> {{ $jobRoleName }}</td>
-                </tr>
-                <tr>
-                    <td><span class="bold">Empresa:</span> {{ $companyName }}</td>
-                    <td><span class="bold">Filial:</span> {{ $branchName }}</td>
-                    <td><span class="bold">Obra:</span> {{ $workName }}</td>
-                    <td><span class="bold">Tipo Aviso:</span> {{ $termination->notice_type ?? '-' }}</td>
-                </tr>
-                <tr>
-                    <td><span class="bold">Data Desligamento:</span> {{ optional($termination->termination_date)->format('d/m/Y') }}</td>
-                    <td><span class="bold">Data Projetada:</span> {{ optional($termination->projected_end_date)->format('d/m/Y') ?: '-' }}</td>
-                    <td><span class="bold">Dias Aviso:</span> {{ $termination->notice_days ?? 0 }}</td>
-                    <td><span class="bold">Status:</span> {{ $termination->status ?? '-' }}</td>
-                </tr>
-            </table>
-        </div>
-    </div>
+    <table>
+        <tr>
+            <td><b>Colaborador:</b> {{ $employee->name }}</td>
+            <td><b>CPF:</b> {{ $employee->cpf }}</td>
+            <td><b>Matrícula:</b> {{ $contract->registration_number ?? '-' }}</td>
+        </tr>
+        <tr>
+            <td><b>Data:</b> {{ optional($termination->termination_date)->format('d/m/Y') }}</td>
+            <td><b>Aviso:</b> {{ $termination->notice_type }}</td>
+            <td><b>Dias:</b> {{ $termination->notice_days }}</td>
+        </tr>
+    </table>
 
-    <div class="box">
-        <div class="box-title">Itens da Rescisão</div>
-        <div class="box-body">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">Código</th>
-                        <th>Descrição</th>
-                        <th style="width: 15%;" class="center">Ref.</th>
-                        <th style="width: 18%;" class="right">Proventos</th>
-                        <th style="width: 18%;" class="right">Descontos</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($items as $item)
-                        <tr>
-                            <td>{{ $item['code'] ?? '-' }}</td>
-                            <td>{{ $item['description'] ?? '-' }}</td>
-                            <td class="center">{{ isset($item['reference']) ? number_format((float) $item['reference'], 2, ',', '.') : '-' }}</td>
-                            <td class="right">
-                                {{ ($item['type'] ?? null) === 'provento'
-                                    ? 'R$ ' . number_format((float) ($item['amount'] ?? 0), 2, ',', '.')
-                                    : '' }}
-                            </td>
-                            <td class="right">
-                                {{ ($item['type'] ?? null) === 'desconto'
-                                    ? 'R$ ' . number_format((float) ($item['amount'] ?? 0), 2, ',', '.')
-                                    : '' }}
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="5" class="center">Nenhum item calculado.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <br>
 
-    <div class="box">
-        <div class="box-title">Resumo Financeiro</div>
-        <div class="box-body">
-            <table class="summary">
+    <table>
+        <thead>
+            <tr>
+                <th>Cód</th>
+                <th>Descrição</th>
+                <th class="center">Ref</th>
+                <th class="right">Proventos</th>
+                <th class="right">Descontos</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($items as $item)
                 <tr>
-                    <td style="width: 50%;">Total Bruto</td>
-                    <td class="right">R$ {{ number_format((float) ($result['gross_amount'] ?? 0), 2, ',', '.') }}</td>
-                </tr>
-                <tr>
-                    <td>Total Descontos</td>
-                    <td class="right">R$ {{ number_format((float) ($result['total_discounts'] ?? 0), 2, ',', '.') }}</td>
-                </tr>
-                <tr class="net">
-                    <td>Líquido da Rescisão</td>
-                    <td class="right">R$ {{ number_format((float) ($result['net_amount'] ?? 0), 2, ',', '.') }}</td>
-                </tr>
-            </table>
-        </div>
-    </div>
+                    <td>{{ $item['code'] }}</td>
+                    <td>{{ $item['description'] }}</td>
+                    <td class="center">{{ number_format($item['reference'],2,',','.') }}</td>
 
-    <div class="box">
-        <div class="box-title">Bases e FGTS</div>
-        <div class="box-body">
-            <table>
-                <tr>
-                    <td><span class="bold">Base INSS:</span> R$ {{ number_format((float) ($result['base_inss'] ?? 0), 2, ',', '.') }}</td>
-                    <td><span class="bold">Base IRRF:</span> R$ {{ number_format((float) ($result['base_irrf'] ?? 0), 2, ',', '.') }}</td>
+                    <td class="right">
+                        {{ $item['type'] === 'provento' ? 'R$ '.number_format($item['amount'],2,',','.') : '' }}
+                    </td>
+
+                    <td class="right">
+                        {{ $item['type'] === 'desconto' ? 'R$ '.number_format($item['amount'],2,',','.') : '' }}
+                    </td>
                 </tr>
-                <tr>
-                    <td><span class="bold">FGTS do mês:</span> R$ {{ number_format((float) ($result['fgts_month_amount'] ?? 0), 2, ',', '.') }}</td>
-                    <td><span class="bold">Multa 40% FGTS:</span> R$ {{ number_format((float) ($result['fgts_fine_amount'] ?? 0), 2, ',', '.') }}</td>
-                </tr>
-            </table>
-            <p class="small mt">
-                Este relatório é um demonstrativo interno para conferência das verbas rescisórias calculadas pelo sistema.
-            </p>
-        </div>
-    </div>
+            @endforeach
+        </tbody>
+    </table>
+
+    <br>
+
+    <table class="summary">
+        <tr>
+            <td>Total Bruto</td>
+            <td class="right">R$ {{ number_format($result['gross_amount'],2,',','.') }}</td>
+        </tr>
+        <tr>
+            <td>Descontos</td>
+            <td class="right">R$ {{ number_format($result['total_discounts'],2,',','.') }}</td>
+        </tr>
+        <tr class="net">
+            <td>Líquido</td>
+            <td class="right">R$ {{ number_format($result['net_amount'],2,',','.') }}</td>
+        </tr>
+    </table>
 
     <div class="signature">
-        <div class="signature-line">
-            Assinatura / Conferência
-        </div>
+        <div class="line">Assinatura</div>
     </div>
+
+</div>
+@endfor
+
 </body>
 </html>

@@ -9,43 +9,47 @@ use RuntimeException;
 
 class EmployeeRehireService
 {
+    public function __construct(
+        protected EmployeeContractLifecycleService $contractLifecycleService,
+    ) {}
+
     public function rehire(Employee $employee, array $data): EmployeeContract
     {
         return DB::transaction(function () use ($employee, $data) {
-            $currentContract = $employee->currentContract;
-
-            if ($currentContract && ! $currentContract->isTerminated()) {
-                throw new RuntimeException('O colaborador já possui contrato ativo ou em aviso.');
+            if (! $employee->exists) {
+                throw new RuntimeException('Colaborador inválido para recontratação.');
             }
 
-            $lastSequence = (int) $employee->contracts()->max('contract_sequence');
-            $newSequence = $lastSequence + 1;
+            $nextSequence = EmployeeContract::query()
+                ->where('employee_id', $employee->id)
+                ->max('contract_sequence');
 
-            $registrationNumber = $this->generateRegistrationNumber($employee, $newSequence);
+            $nextSequence = ((int) $nextSequence) + 1;
 
-            $employee->contracts()->where('is_current', true)->update([
-                'is_current' => false,
-            ]);
+            EmployeeContract::query()
+                ->where('employee_id', $employee->id)
+                ->update(['is_current' => false]);
+
+            $registrationNumber = $data['registration_number']
+                ?? (($employee->code ?: str_pad((string) $employee->id, 4, '0', STR_PAD_LEFT)) . '-' . str_pad((string) $nextSequence, 2, '0', STR_PAD_LEFT));
 
             $contract = EmployeeContract::create([
                 'employee_id' => $employee->id,
-                'company_id' => $data['company_id'] ?? $employee->company_id ?? null,
-                'branch_id' => $data['branch_id'] ?? $employee->branch_id ?? null,
-                'work_id' => $data['work_id'] ?? $employee->work_id ?? null,
-                'department_id' => $data['department_id'] ?? $employee->department_id ?? null,
-                'job_role_id' => $data['job_role_id'] ?? $employee->job_role_id ?? null,
-                'cost_center_id' => $data['cost_center_id'] ?? $employee->cost_center_id ?? null,
-                'contract_type_id' => $data['contract_type_id'] ?? $employee->contract_type_id ?? null,
-                'work_shift_id' => $data['work_shift_id'] ?? $employee->work_shift_id ?? null,
+                'company_id' => $data['company_id'] ?? $employee->company_id,
+                'branch_id' => $data['branch_id'] ?? $employee->branch_id,
+                'work_id' => $data['work_id'] ?? $employee->work_id,
+                'department_id' => $data['department_id'] ?? $employee->department_id,
+                'job_role_id' => $data['job_role_id'] ?? $employee->job_role_id,
+                'cost_center_id' => $data['cost_center_id'] ?? $employee->cost_center_id,
+                'contract_type_id' => $data['contract_type_id'] ?? $employee->contract_type_id,
+                'work_shift_id' => $data['work_shift_id'] ?? $employee->work_shift_id,
                 'registration_number' => $registrationNumber,
-                'contract_sequence' => $newSequence,
-                'admission_date' => $data['admission_date'],
+                'contract_sequence' => $nextSequence,
+                'status' => 'ativo',
+                'is_current' => true,
+                'admission_date' => $data['admission_date'] ?? now()->toDateString(),
                 'termination_date' => null,
                 'salary' => $data['salary'] ?? $employee->salary ?? 0,
-                'status' => 'ativo',
-                'termination_reason' => null,
-                'is_active' => true,
-                'is_current' => true,
                 'notes' => $data['notes'] ?? null,
             ]);
 
@@ -59,22 +63,15 @@ class EmployeeRehireService
                 'contract_type_id' => $contract->contract_type_id,
                 'work_shift_id' => $contract->work_shift_id,
                 'admission_date' => $contract->admission_date,
-                'salary' => $contract->salary,
-                'status' => 'ativo',
-                'is_active' => true,
                 'termination_date' => null,
+                'salary' => $contract->salary,
+                'status' => 'active',
+                'is_active' => true,
             ]);
+
+            $this->contractLifecycleService->activateContract($contract);
 
             return $contract;
         });
-    }
-
-    protected function generateRegistrationNumber(Employee $employee, int $sequence): string
-    {
-        $base = $employee->code ?: str_pad((string) $employee->id, 5, '0', STR_PAD_LEFT);
-
-        return $sequence === 1
-            ? $base
-            : $base . '-' . $sequence;
     }
 }

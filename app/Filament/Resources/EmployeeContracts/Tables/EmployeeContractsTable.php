@@ -3,10 +3,14 @@
 namespace App\Filament\Resources\EmployeeContracts\Tables;
 
 use App\Models\EmployeeContract;
+use App\Models\EmployeeTermination;
+use App\Services\EmployeeContractLifecycleService;
+use App\Services\EmployeeRehireService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -16,65 +20,42 @@ class EmployeeContractsTable
     {
         return $table
             ->columns([
-                TextColumn::make('employee.name')
-                    ->label('Colaborador')
-                    ->searchable(),
+                TextColumn::make('employee.name')->label('Colaborador')->searchable(),
+                TextColumn::make('registration_number')->label('Matrícula')->searchable(),
+                TextColumn::make('contract_sequence')->label('Seq.'),
+                TextColumn::make('company.name')->label('Empresa'),
+                TextColumn::make('work.name')->label('Obra'),
+                TextColumn::make('jobRole.name')->label('Cargo'),
 
-                TextColumn::make('registration_number')
-                    ->label('Matrícula')
-                    ->searchable(),
-
-                TextColumn::make('contract_sequence')
-                    ->label('Seq.'),
-
-                TextColumn::make('company.name')
-                    ->label('Empresa'),
-
-                TextColumn::make('work.name')
-                    ->label('Obra'),
-
-                TextColumn::make('jobRole.name')
-                    ->label('Cargo'),
-
-                BadgeColumn::make('status')
+                TextColumn::make('status')
                     ->label('Status')
-                    ->colors([
-                        'success' => 'ativo',
-                        'warning' => 'em_aviso',
-                        'danger' => 'desligado',
-                        'secondary' => 'suspenso',
-                        'info' => 'afastado',
-                    ]),
+                    ->badge()
+                    ->color(fn (?string $state): string => match ($state) {
+                        'ativo' => 'success',
+                        'em_aviso' => 'warning',
+                        'desligado' => 'danger',
+                        default => 'gray',
+                    }),
 
-                BadgeColumn::make('is_current')
+                TextColumn::make('is_current')
                     ->label('Atual')
+                    ->badge()
                     ->formatStateUsing(fn ($state) => $state ? 'Sim' : 'Não')
-                    ->colors([
-                        'success' => true,
-                        'gray' => false,
-                    ]),
+                    ->color(fn ($state) => $state ? 'success' : 'gray'),
             ])
 
             ->recordActions([
                 EditAction::make(),
 
-                // 🔥 MARCAR COMO ATUAL
+                // 🔥 ATIVAR CONTRATO
                 Action::make('set_current')
                     ->label('Tornar Atual')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn ($record) => ! $record->is_current)
                     ->requiresConfirmation()
-                    ->action(function (EmployeeContract $record) {
-
-                        EmployeeContract::query()
-                            ->where('employee_id', $record->employee_id)
-                            ->update(['is_current' => false]);
-
-                        $record->update([
-                            'is_current' => true,
-                            'status' => 'ativo',
-                        ]);
+                    ->action(function (EmployeeContract $record, EmployeeContractLifecycleService $service) {
+                        $service->activateContract($record);
 
                         Notification::make()
                             ->title('Contrato definido como atual.')
@@ -82,43 +63,43 @@ class EmployeeContractsTable
                             ->send();
                     }),
 
-                // ⚠️ COLOCAR EM AVISO
+                // ⚠ AVISO
                 Action::make('set_notice')
                     ->label('Colocar em Aviso')
                     ->icon('heroicon-o-exclamation-triangle')
                     ->color('warning')
                     ->visible(fn ($record) => $record->status === 'ativo')
                     ->requiresConfirmation()
-                    ->action(function (EmployeeContract $record) {
-
-                        $record->update([
-                            'status' => 'em_aviso',
-                        ]);
+                    ->action(function (EmployeeContract $record, EmployeeContractLifecycleService $service) {
+                        $service->putInNotice($record);
 
                         Notification::make()
-                            ->title('Contrato em aviso prévio.')
+                            ->title('Contrato em aviso.')
                             ->success()
                             ->send();
                     }),
 
-                // ❌ DESLIGAR
-                Action::make('terminate')
-                    ->label('Desligar')
-                    ->icon('heroicon-o-x-circle')
+                // 🚨 NOVO FLUXO CORRETO
+                Action::make('start_termination')
+                    ->label('Iniciar Desligamento')
+                    ->icon('heroicon-o-document-minus')
                     ->color('danger')
+                    ->visible(fn ($record) => $record->status !== 'desligado')
                     ->requiresConfirmation()
                     ->action(function (EmployeeContract $record) {
 
-                        $record->update([
-                            'status' => 'desligado',
-                            'is_current' => false,
-                            'termination_date' => now(),
+                        $termination = EmployeeTermination::create([
+                            'employee_id' => $record->employee_id,
+                            'employee_contract_id' => $record->id,
+                            'status' => 'draft',
+                            'termination_date' => now()->toDateString(),
                         ]);
 
-                        Notification::make()
-                            ->title('Contrato desligado.')
-                            ->success()
-                            ->send();
+                        return redirect()->to(
+                            route('filament.app.resources.employee-terminations.edit', [
+                                'record' => $termination->id,
+                            ])
+                        );
                     }),
 
                 // 🔁 RECONTRATAR
@@ -127,35 +108,15 @@ class EmployeeContractsTable
                     ->icon('heroicon-o-arrow-path')
                     ->color('info')
                     ->visible(fn ($record) => $record->status === 'desligado')
-                    ->requiresConfirmation()
-                    ->action(function (EmployeeContract $record) {
-
-                        $nextSequence = EmployeeContract::query()
-                            ->where('employee_id', $record->employee_id)
-                            ->max('contract_sequence');
-
-                        $nextSequence = ((int) $nextSequence) + 1;
-
-                        EmployeeContract::create([
-                            'employee_id' => $record->employee_id,
-                            'company_id' => $record->company_id,
-                            'branch_id' => $record->branch_id,
-                            'work_id' => $record->work_id,
-                            'department_id' => $record->department_id,
-                            'job_role_id' => $record->job_role_id,
-                            'cost_center_id' => $record->cost_center_id,
-                            'contract_type_id' => $record->contract_type_id,
-                            'work_shift_id' => $record->work_shift_id,
-                            'registration_number' => $record->registration_number,
-                            'contract_sequence' => $nextSequence,
-                            'status' => 'ativo',
-                            'is_current' => true,
-                            'admission_date' => now(),
-                            'salary' => $record->salary,
-                        ]);
+                    ->form([
+                        DatePicker::make('admission_date')->label('Admissão')->required(),
+                        TextInput::make('salary')->label('Salário')->numeric()->required(),
+                    ])
+                    ->action(function (EmployeeContract $record, array $data, EmployeeRehireService $service) {
+                        $service->rehire($record->employee, $data);
 
                         Notification::make()
-                            ->title('Colaborador recontratado.')
+                            ->title('Recontratado com sucesso.')
                             ->success()
                             ->send();
                     }),

@@ -49,22 +49,21 @@ class TerminationReportService
             ]);
     }
 
-    public function stream(EmployeeTermination $termination)
-    {
-        return $this->generate($termination)
-            ->stream($this->fileName($termination));
-    }
-
     public function download(EmployeeTermination $termination)
     {
         return $this->generate($termination)
             ->download($this->fileName($termination));
     }
 
+    public function output(EmployeeTermination $termination): string
+    {
+        return $this->generate($termination)->output();
+    }
+
     protected function fileName(EmployeeTermination $termination): string
     {
         $employeeName = str($termination->employee?->name ?? 'colaborador')->slug();
 
-        return "rescisao-premium-{$employeeName}-{$termination->id}.pdf";
+        return "rescisao-{$employeeName}-{$termination->id}.pdf";
     }
 }

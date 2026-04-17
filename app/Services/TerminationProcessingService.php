@@ -10,6 +10,7 @@ class TerminationProcessingService
 {
     public function __construct(
         protected TerminationCalculationService $terminationCalculationService,
+        protected EmployeeContractLifecycleService $contractLifecycleService,
     ) {}
 
     public function calculate(EmployeeTermination $termination, array $context = []): array
@@ -67,19 +68,11 @@ class TerminationProcessingService
                 throw new RuntimeException('Desligamento sem colaborador ou contrato vinculado.');
             }
 
-            $contract->update([
-                'status' => 'desligado',
-                'is_active' => false,
-                'is_current' => false,
-                'termination_date' => $termination->termination_date,
-                'termination_reason' => $termination->termination_reason,
-            ]);
-
-            $employee->update([
-                'status' => 'terminated',
-                'is_active' => false,
-                'termination_date' => $termination->termination_date,
-            ]);
+            $this->contractLifecycleService->terminateContract(
+                contract: $contract,
+                terminationDate: optional($termination->termination_date)->format('Y-m-d'),
+                reason: $termination->termination_reason,
+            );
 
             $termination->update([
                 'status' => 'closed',

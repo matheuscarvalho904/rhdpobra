@@ -105,8 +105,14 @@ class EmployeeTerminationsTable
                     ->label('Gerar PDF')
                     ->icon('heroicon-o-document-arrow-down')
                     ->color('gray')
-                    ->action(function ($record, TerminationReportService $service) {
-                        return $service->stream($record);
+                    ->action(function ($record) {
+                        $service = app(TerminationReportService::class);
+                        $pdfContent = $service->output($record);
+
+                        return response()->streamDownload(
+                            fn () => print($pdfContent),
+                            'rescisao-' . ($record->id ?? 'arquivo') . '.pdf'
+                        );
                     }),
 
                 Action::make('close_termination')

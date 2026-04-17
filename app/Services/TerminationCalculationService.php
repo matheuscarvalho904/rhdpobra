@@ -19,7 +19,7 @@ class TerminationCalculationService
         }
 
         $salary = $this->money((float) (
-            $context['salary']
+            data_get($context, 'salary')
                 ?? $contract->salary
                 ?? $employee->salary
                 ?? 0
@@ -30,14 +30,14 @@ class TerminationCalculationService
         }
 
         $admissionDate = $this->parseDate(
-            $context['admission_date']
+            data_get($context, 'admission_date')
                 ?? $contract->admission_date
                 ?? $employee->admission_date
         );
 
         $terminationDate = $this->parseDate(
             $termination->termination_date
-                ?? $context['termination_date']
+                ?? data_get($context, 'termination_date')
         );
 
         if (! $terminationDate) {
@@ -46,15 +46,17 @@ class TerminationCalculationService
 
         $noticeType = $termination->notice_type ?? 'worked';
         $noticeDays = (int) ($termination->notice_days ?? 0);
+
         $projectedEndDate = $this->parseDate(
             $termination->projected_end_date
-                ?? $context['projected_end_date']
+                ?? data_get($context, 'projected_end_date')
         );
 
-        $fgtsBalance = $this->money((float) ($context['fgts_balance'] ?? 0));
-        $unusedVacationPeriods = (int) ($context['unused_vacation_periods'] ?? 0);
+        $fgtsBalance = $this->money((float) (data_get($context, 'fgts_balance') ?? 0));
+        $unusedVacationPeriods = (int) (data_get($context, 'unused_vacation_periods') ?? 0);
 
         $salaryBalance = $this->calculateSalaryBalance($salary, $terminationDate);
+
         $noticePay = $this->calculateNoticePay(
             salary: $salary,
             noticeType: $noticeType,
@@ -82,19 +84,19 @@ class TerminationCalculationService
         );
 
         $grossRescission = $this->money(
-            $salaryBalance['amount']
-            + $noticePay['amount']
-            + $thirteenthData['amount']
-            + $vacationOverdueData['vacation_amount']
-            + $vacationOverdueData['one_third_amount']
-            + $vacationProportionalData['vacation_amount']
-            + $vacationProportionalData['one_third_amount']
+            ($salaryBalance['amount'] ?? 0)
+            + ($noticePay['amount'] ?? 0)
+            + ($thirteenthData['amount'] ?? 0)
+            + ($vacationOverdueData['vacation_amount'] ?? 0)
+            + ($vacationOverdueData['one_third_amount'] ?? 0)
+            + ($vacationProportionalData['vacation_amount'] ?? 0)
+            + ($vacationProportionalData['one_third_amount'] ?? 0)
         );
 
         $inssBase = $this->money(
-            $salaryBalance['amount']
-            + $noticePay['amount']
-            + $thirteenthData['amount']
+            ($salaryBalance['amount'] ?? 0)
+            + ($noticePay['amount'] ?? 0)
+            + ($thirteenthData['amount'] ?? 0)
         );
 
         $inssAmount = $employee->has_inss
@@ -110,9 +112,9 @@ class TerminationCalculationService
             : $this->emptyIrrfData();
 
         $fgtsMonthBase = $this->money(
-            $salaryBalance['amount']
-            + $noticePay['fgts_base']
-            + $thirteenthData['fgts_base']
+            ($salaryBalance['amount'] ?? 0)
+            + ($noticePay['fgts_base'] ?? 0)
+            + ($thirteenthData['fgts_base'] ?? 0)
         );
 
         $fgtsRate = (float) ($employee->fgts_rate ?? 8.00);
@@ -126,8 +128,7 @@ class TerminationCalculationService
             : 0.0;
 
         $totalDiscounts = $this->money(
-            $inssAmount
-            + $irrfData['irrf_amount']
+            $inssAmount + ($irrfData['irrf_amount'] ?? 0)
         );
 
         $netRescission = $this->money($grossRescission - $totalDiscounts);
@@ -140,36 +141,36 @@ class TerminationCalculationService
             'document_type' => 'rescisao',
 
             'salary' => $salary,
-            'termination_date' => optional($terminationDate)->format('Y-m-d'),
+            'termination_date' => $terminationDate?->format('Y-m-d'),
             'notice_type' => $noticeType,
             'notice_days' => $noticeDays,
-            'projected_end_date' => optional($projectedEndDate)->format('Y-m-d'),
+            'projected_end_date' => $projectedEndDate?->format('Y-m-d'),
 
-            'salary_balance' => $salaryBalance['amount'],
-            'salary_balance_days' => $salaryBalance['days'],
+            'salary_balance' => $salaryBalance['amount'] ?? 0,
+            'salary_balance_days' => $salaryBalance['days'] ?? 0,
 
-            'notice_amount' => $noticePay['amount'],
-            'notice_reference_days' => $noticePay['reference_days'],
+            'notice_amount' => $noticePay['amount'] ?? 0,
+            'notice_reference_days' => $noticePay['reference_days'] ?? 0,
 
-            'thirteenth_amount' => $thirteenthData['amount'],
-            'thirteenth_avos' => $thirteenthData['avos'],
+            'thirteenth_amount' => $thirteenthData['amount'] ?? 0,
+            'thirteenth_avos' => $thirteenthData['avos'] ?? 0,
 
-            'vacation_overdue_amount' => $vacationOverdueData['vacation_amount'],
-            'vacation_overdue_one_third' => $vacationOverdueData['one_third_amount'],
-            'vacation_overdue_periods' => $vacationOverdueData['periods'],
+            'vacation_overdue_amount' => $vacationOverdueData['vacation_amount'] ?? 0,
+            'vacation_overdue_one_third' => $vacationOverdueData['one_third_amount'] ?? 0,
+            'vacation_overdue_periods' => $vacationOverdueData['periods'] ?? 0,
 
-            'vacation_proportional_amount' => $vacationProportionalData['vacation_amount'],
-            'vacation_proportional_one_third' => $vacationProportionalData['one_third_amount'],
-            'vacation_proportional_avos' => $vacationProportionalData['avos'],
+            'vacation_proportional_amount' => $vacationProportionalData['vacation_amount'] ?? 0,
+            'vacation_proportional_one_third' => $vacationProportionalData['one_third_amount'] ?? 0,
+            'vacation_proportional_avos' => $vacationProportionalData['avos'] ?? 0,
 
             'gross_amount' => $grossRescission,
             'inss_amount' => $inssAmount,
-            'irrf_amount' => $irrfData['irrf_amount'],
+            'irrf_amount' => $irrfData['irrf_amount'] ?? 0,
             'total_discounts' => $totalDiscounts,
             'net_amount' => $netRescission,
 
             'base_inss' => $inssBase,
-            'base_irrf' => $irrfData['irrf_base'],
+            'base_irrf' => $irrfData['irrf_base'] ?? 0,
 
             'fgts_rate' => $fgtsRate,
             'fgts_month_base' => $fgtsMonthBase,
@@ -185,7 +186,7 @@ class TerminationCalculationService
                 vacationOverdueData: $vacationOverdueData,
                 vacationProportionalData: $vacationProportionalData,
                 inssAmount: $inssAmount,
-                irrfAmount: $irrfData['irrf_amount'],
+                irrfAmount: $irrfData['irrf_amount'] ?? 0,
                 fgtsMonthAmount: $fgtsMonthAmount,
                 fgtsFineAmount: $fgtsFineAmount
             ),
@@ -321,79 +322,79 @@ class TerminationCalculationService
     ): array {
         $items = [];
 
-        if ($salaryBalance['amount'] > 0) {
+        if (($salaryBalance['amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'SALDO_SAL',
                 'description' => 'Saldo de Salário',
                 'type' => 'provento',
                 'reference' => (float) ($salaryBalance['days'] ?? 0),
-                'amount' => $this->money($salaryBalance['amount']),
+                'amount' => $this->money($salaryBalance['amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($noticePay['amount'] > 0) {
+        if (($noticePay['amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'AVISO',
                 'description' => 'Aviso Prévio Indenizado',
                 'type' => 'provento',
                 'reference' => (float) ($noticePay['reference_days'] ?? 0),
-                'amount' => $this->money($noticePay['amount']),
+                'amount' => $this->money($noticePay['amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($thirteenthData['amount'] > 0) {
+        if (($thirteenthData['amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => '13PROP',
                 'description' => '13º Proporcional',
                 'type' => 'provento',
                 'reference' => (float) ($thirteenthData['avos'] ?? 0),
-                'amount' => $this->money($thirteenthData['amount']),
+                'amount' => $this->money($thirteenthData['amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($vacationOverdueData['vacation_amount'] > 0) {
+        if (($vacationOverdueData['vacation_amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'FERIAS_VENC',
                 'description' => 'Férias Vencidas',
                 'type' => 'provento',
                 'reference' => (float) ($vacationOverdueData['periods'] ?? 0),
-                'amount' => $this->money($vacationOverdueData['vacation_amount']),
+                'amount' => $this->money($vacationOverdueData['vacation_amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($vacationOverdueData['one_third_amount'] > 0) {
+        if (($vacationOverdueData['one_third_amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'FERIAS_VENC_13',
                 'description' => '1/3 sobre Férias Vencidas',
                 'type' => 'provento',
                 'reference' => 0,
-                'amount' => $this->money($vacationOverdueData['one_third_amount']),
+                'amount' => $this->money($vacationOverdueData['one_third_amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($vacationProportionalData['vacation_amount'] > 0) {
+        if (($vacationProportionalData['vacation_amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'FERIAS_PROP',
                 'description' => 'Férias Proporcionais',
                 'type' => 'provento',
                 'reference' => (float) ($vacationProportionalData['avos'] ?? 0),
-                'amount' => $this->money($vacationProportionalData['vacation_amount']),
+                'amount' => $this->money($vacationProportionalData['vacation_amount'] ?? 0),
                 'source' => 'termination',
             ];
         }
 
-        if ($vacationProportionalData['one_third_amount'] > 0) {
+        if (($vacationProportionalData['one_third_amount'] ?? 0) > 0) {
             $items[] = [
                 'code' => 'FERIAS_PROP_13',
                 'description' => '1/3 sobre Férias Proporcionais',
                 'type' => 'provento',
                 'reference' => 0,
-                'amount' => $this->money($vacationProportionalData['one_third_amount']),
+                'amount' => $this->money($vacationProportionalData['one_third_amount'] ?? 0),
                 'source' => 'termination',
             ];
         }

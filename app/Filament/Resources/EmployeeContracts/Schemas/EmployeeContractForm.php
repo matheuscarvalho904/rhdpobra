@@ -2,12 +2,25 @@
 
 namespace App\Filament\Resources\EmployeeContracts\Schemas;
 
+use App\Models\Branch;
+use App\Models\Company;
+use App\Models\ContractType;
+use App\Models\CostCenter;
+use App\Models\Department;
+use App\Models\Employee;
+use App\Models\EmployeeContract;
+use App\Models\JobRole;
+use App\Models\Work;
+use App\Models\WorkShift;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 
 class EmployeeContractForm
 {
@@ -16,76 +29,163 @@ class EmployeeContractForm
         return $schema->components([
             Tabs::make('Contrato')
                 ->tabs([
-                    Tabs\Tab::make('Dados do Contrato')
+                    Tab::make('Dados do Contrato')
                         ->schema([
                             Select::make('employee_id')
                                 ->label('Colaborador')
-                                ->relationship('employee', 'name')
+                                ->options(fn () => Employee::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload()
-                                ->required(),
+                                ->live()
+                                ->required()
+                                ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                    if (! $state) {
+                                        return;
+                                    }
+
+                                    $employee = Employee::query()->find($state);
+
+                                    if (! $employee) {
+                                        return;
+                                    }
+
+                                    $nextSequence = EmployeeContract::query()
+                                        ->where('employee_id', $employee->id)
+                                        ->max('contract_sequence');
+
+                                    $nextSequence = ((int) $nextSequence) + 1;
+
+                                    $set('contract_sequence', $nextSequence);
+
+                                    if (blank($get('registration_number'))) {
+                                        $employeeCode = $employee->code ?: str_pad((string) $employee->id, 4, '0', STR_PAD_LEFT);
+                                        $registration = $employeeCode . '-' . str_pad((string) $nextSequence, 2, '0', STR_PAD_LEFT);
+
+                                        $set('registration_number', $registration);
+                                    }
+
+                                    if (blank($get('company_id')) && $employee->company_id) {
+                                        $set('company_id', $employee->company_id);
+                                    }
+
+                                    if (blank($get('branch_id')) && $employee->branch_id) {
+                                        $set('branch_id', $employee->branch_id);
+                                    }
+
+                                    if (blank($get('work_id')) && $employee->work_id) {
+                                        $set('work_id', $employee->work_id);
+                                    }
+
+                                    if (blank($get('department_id')) && $employee->department_id) {
+                                        $set('department_id', $employee->department_id);
+                                    }
+
+                                    if (blank($get('job_role_id')) && $employee->job_role_id) {
+                                        $set('job_role_id', $employee->job_role_id);
+                                    }
+
+                                    if (blank($get('cost_center_id')) && $employee->cost_center_id) {
+                                        $set('cost_center_id', $employee->cost_center_id);
+                                    }
+
+                                    if (blank($get('contract_type_id')) && $employee->contract_type_id) {
+                                        $set('contract_type_id', $employee->contract_type_id);
+                                    }
+
+                                    if (blank($get('work_shift_id')) && $employee->work_shift_id) {
+                                        $set('work_shift_id', $employee->work_shift_id);
+                                    }
+
+                                    if (blank($get('admission_date')) && $employee->admission_date) {
+                                        $set('admission_date', optional($employee->admission_date)->format('Y-m-d'));
+                                    }
+
+                                    if (blank($get('salary')) && $employee->salary) {
+                                        $set('salary', (float) $employee->salary);
+                                    }
+                                }),
 
                             TextInput::make('registration_number')
                                 ->label('Matrícula')
                                 ->required()
-                                ->maxLength(50),
+                                ->maxLength(50)
+                                ->helperText('Pode ser preenchida automaticamente ao selecionar o colaborador.'),
 
                             TextInput::make('contract_sequence')
                                 ->label('Sequência')
                                 ->numeric()
-                                ->required(),
+                                ->required()
+                                ->default(1),
                         ]),
 
-                    Tabs\Tab::make('Lotação e Estrutura')
+                    Tab::make('Lotação e Estrutura')
                         ->schema([
                             Select::make('company_id')
                                 ->label('Empresa')
-                                ->relationship('company', 'name')
+                                ->options(fn () => Company::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
-                                ->preload(),
+                                ->preload()
+                                ->live()
+                                ->afterStateUpdated(function (Set $set): void {
+                                    $set('branch_id', null);
+                                    $set('work_id', null);
+                                }),
 
                             Select::make('branch_id')
                                 ->label('Filial')
-                                ->relationship('branch', 'name')
+                                ->options(fn (Get $get) => Branch::query()
+                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray())
                                 ->searchable()
-                                ->preload(),
+                                ->preload()
+                                ->live()
+                                ->afterStateUpdated(function (Set $set): void {
+                                    $set('work_id', null);
+                                }),
 
                             Select::make('work_id')
                                 ->label('Obra')
-                                ->relationship('work', 'name')
+                                ->options(fn (Get $get) => Work::query()
+                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                    ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->toArray())
                                 ->searchable()
                                 ->preload(),
 
                             Select::make('department_id')
                                 ->label('Departamento')
-                                ->relationship('department', 'name')
+                                ->options(fn () => Department::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload(),
 
                             Select::make('job_role_id')
                                 ->label('Cargo')
-                                ->relationship('jobRole', 'name')
+                                ->options(fn () => JobRole::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload(),
 
                             Select::make('cost_center_id')
                                 ->label('Centro de Custo')
-                                ->relationship('costCenter', 'name')
+                                ->options(fn () => CostCenter::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload(),
                         ]),
 
-                    Tabs\Tab::make('Condições do Vínculo')
+                    Tab::make('Condições do Vínculo')
                         ->schema([
                             Select::make('contract_type_id')
                                 ->label('Tipo de Contrato')
-                                ->relationship('contractType', 'name')
+                                ->options(fn () => ContractType::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload(),
 
                             Select::make('work_shift_id')
                                 ->label('Jornada')
-                                ->relationship('workShift', 'name')
+                                ->options(fn () => WorkShift::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                 ->searchable()
                                 ->preload(),
 
@@ -102,7 +202,7 @@ class EmployeeContractForm
                                 ->required(),
                         ]),
 
-                    Tabs\Tab::make('Datas e Valores')
+                    Tab::make('Datas e Valores')
                         ->schema([
                             DatePicker::make('admission_date')
                                 ->label('Admissão')
@@ -118,14 +218,14 @@ class EmployeeContractForm
                                 ->required(),
                         ]),
 
-                    Tabs\Tab::make('Observações')
+                    Tab::make('Observações')
                         ->schema([
                             Textarea::make('notes')
                                 ->label('Observações')
-                                ->rows(6)
-                                ->columnSpanFull(),
+                                ->rows(6),
                         ]),
                 ])
+                ->persistTabInQueryString()
                 ->columnSpanFull(),
         ]);
     }

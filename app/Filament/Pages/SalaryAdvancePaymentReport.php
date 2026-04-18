@@ -6,143 +6,210 @@ use App\Models\Branch;
 use App\Models\Company;
 use App\Models\SalaryAdvance;
 use App\Models\Work;
-use BackedEnum;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Filament\Notifications\Notification;
+use Filament\Actions\Action;
 use Filament\Pages\Page;
-use UnitEnum;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class SalaryAdvancePaymentReport extends Page
 {
-    protected static ?string $navigationLabel = 'Pagto. Adiantamento';
-    protected static ?string $title = 'Relatório de Pagamento de Adiantamento';
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-banknotes';
-    protected static string|UnitEnum|null $navigationGroup = 'Folha';
-    protected static ?int $navigationSort = 31; 
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-banknotes';
+
+    protected static ?string $navigationLabel = 'Relatório de Pgto de Adiantamentos';
+    protected static ?string $title = 'Pagamento de Adiantamentos';
+    protected static string|\UnitEnum|null $navigationGroup = 'Folha';
+    protected static ?int $navigationSort = 20;
 
     protected string $view = 'filament.pages.salary-advance-payment-report';
 
     public ?int $company_id = null;
     public ?int $branch_id = null;
     public ?int $work_id = null;
+    public ?string $status = null;
+    public ?string $payment_method = null;
     public ?string $date_from = null;
     public ?string $date_to = null;
-    public ?string $status = 'paid';
-    public ?string $payment_method = 'pix';
-
-    public array $companies = [];
-    public array $branches = [];
-    public array $works = [];
 
     public array $rows = [];
     public float $totalAmount = 0;
 
     public function mount(): void
     {
-        $this->date_from = now()->startOfMonth()->toDateString();
-        $this->date_to = now()->toDateString();
+        $this->date_from = now()->startOfMonth()->format('Y-m-d');
+        $this->date_to = now()->endOfMonth()->format('Y-m-d');
 
-        $this->companies = Company::query()
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+        $this->generateReport();
+    }
 
-        $this->branches = Branch::query()
-            ->orderBy('name')
-            ->pluck('name', 'id')
-            ->toArray();
+    public function getHeaderActions(): array
+    {
+        return [
+            Action::make('generate')
+                ->label('Gerar Relatório')
+                ->icon('heroicon-o-funnel')
+                ->action(fn () => $this->generateReport()),
 
-        $this->works = Work::query()
+            Action::make('pdf')
+                ->label('Exportar PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->color('success')
+                ->action(fn () => $this->exportPdf()),
+        ];
+    }
+
+    public function getCompaniesProperty(): array
+    {
+        return Company::query()
+            ->where('is_active', true)
             ->orderBy('name')
             ->pluck('name', 'id')
             ->toArray();
     }
 
+    public function getBranchesProperty(): array
+    {
+        return Branch::query()
+            ->when($this->company_id, fn (Builder $query) => $query->where('company_id', $this->company_id))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    public function getWorksProperty(): array
+    {
+        return Work::query()
+            ->when($this->company_id, fn (Builder $query) => $query->where('company_id', $this->company_id))
+            ->when($this->branch_id, fn (Builder $query) => $query->where('branch_id', $this->branch_id))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    public function updatedCompanyId(): void
+    {
+        $this->branch_id = null;
+        $this->work_id = null;
+    }
+
+    public function updatedBranchId(): void
+    {
+        $this->work_id = null;
+    }
+
     public function generateReport(): void
     {
-        $query = SalaryAdvance::query()
+        $records = $this->getFilteredQuery()
             ->with([
                 'employee',
-                'employee.jobRole',
                 'company',
-                'branch',
                 'work',
             ])
-            ->when($this->company_id, fn ($query) => $query->where('company_id', $this->company_id))
-            ->when($this->branch_id, fn ($query) => $query->where('branch_id', $this->branch_id))
-            ->when($this->work_id, fn ($query) => $query->where('work_id', $this->work_id))
-            ->when($this->status, fn ($query) => $query->where('status', $this->status))
-            ->when($this->payment_method, fn ($query) => $query->where('payment_method', $this->payment_method))
-            ->when($this->date_from, fn ($query) => $query->whereDate('advance_date', '>=', $this->date_from))
-            ->when($this->date_to, fn ($query) => $query->whereDate('advance_date', '<=', $this->date_to))
             ->orderBy('company_id')
             ->orderBy('work_id')
-            ->orderBy('employee_id');
+            ->orderBy('advance_date')
+            ->get();
 
-        $advances = $query->get();
+        $grouped = [];
+        $total = 0;
 
-        $flatRows = $advances->map(function ($advance) {
-            return [
-                'employee_name' => $advance->employee->name ?? '-',
-                'code' => $advance->employee->code ?? '-',
-                'job_role' => $advance->employee->jobRole->name ?? '-',
-                'company' => $advance->company->name ?? 'Sem Empresa',
-                'branch' => $advance->branch->name ?? 'Sem Filial',
-                'work' => $advance->work->name ?? 'Sem Obra',
-                'advance_date' => optional($advance->advance_date)->format('d/m/Y') ?? '-',
-                'pix_key_type' => $advance->pix_key_type ?: '-',
-                'pix_key' => $advance->pix_key ?: '-',
-                'pix_holder_document' => $advance->pix_holder_document ?: '-',
-                'amount' => (float) $advance->amount,
-                'status' => $advance->status_label,
+        foreach ($records as $record) {
+            $companyName = $record->company?->name ?: 'Sem Empresa';
+            $workName = $record->work?->name ?: 'Sem Obra';
+
+            $amount = (float) $record->amount;
+            $total += $amount;
+
+            $grouped[$companyName][$workName]['rows'][] = [
+                'employee_name' => $record->employee?->name ?: '-',
+                'code' => $record->employee?->code ?: '-',
+                'job_role' => $record->employee?->jobRole?->name ?: '-',
+                'advance_date' => optional($record->advance_date)->format('d/m/Y') ?: '-',
+                'pix_key_type' => $this->formatPixKeyType($record->pix_key_type),
+                'pix_key' => $record->pix_key ?: '-',
+                'pix_holder_document' => $record->pix_holder_document ?: '-',
+                'payment_method' => $this->formatPaymentMethod($record->payment_method),
+                'status' => $this->formatStatus($record->status),
+                'amount' => $amount,
             ];
-        });
 
-        $this->rows = $flatRows
-            ->groupBy('company')
-            ->map(function ($companyRows) {
-                return $companyRows
-                    ->groupBy('work')
-                    ->map(function ($workRows) {
-                        return [
-                            'rows' => $workRows->values()->toArray(),
-                            'total' => (float) $workRows->sum('amount'),
-                        ];
-                    })
-                    ->toArray();
-            })
-            ->toArray();
-
-        $this->totalAmount = (float) $flatRows->sum('amount');
-
-        if ($flatRows->isEmpty()) {
-            Notification::make()
-                ->title('Nenhum registro encontrado para os filtros informados.')
-                ->warning()
-                ->send();
+            $grouped[$companyName][$workName]['total'] =
+                ($grouped[$companyName][$workName]['total'] ?? 0) + $amount;
         }
+
+        $this->rows = $grouped;
+        $this->totalAmount = round($total, 2);
     }
 
     public function exportPdf()
     {
         $this->generateReport();
 
-        if (empty($this->rows)) {
-            return null;
-        }
-
-        $pdf = Pdf::loadView('pdf.salary-advance-payment-report', [
+        $pdf = Pdf::loadView('pdf.reports.salary-advance-payment-report', [
             'rows' => $this->rows,
             'totalAmount' => $this->totalAmount,
-            'dateFrom' => $this->date_from,
-            'dateTo' => $this->date_to,
-            'paymentMethod' => $this->payment_method,
-            'status' => $this->status,
+            'filters' => [
+                'company' => $this->company_id ? ($this->companies[$this->company_id] ?? 'Todas') : 'Todas',
+                'branch' => $this->branch_id ? ($this->branches[$this->branch_id] ?? 'Todas') : 'Todas',
+                'work' => $this->work_id ? ($this->works[$this->work_id] ?? 'Todas') : 'Todas',
+                'status' => $this->status ? $this->formatStatus($this->status) : 'Todos',
+                'payment_method' => $this->payment_method ? $this->formatPaymentMethod($this->payment_method) : 'Todos',
+                'date_from' => $this->date_from ? now()->parse($this->date_from)->format('d/m/Y') : '-',
+                'date_to' => $this->date_to ? now()->parse($this->date_to)->format('d/m/Y') : '-',
+            ],
+            'generatedAt' => now(),
         ])->setPaper('a4', 'landscape');
 
         return response()->streamDownload(
             fn () => print($pdf->output()),
-            'relatorio-pagamento-adiantamento.pdf'
+            'relatorio-pagamento-adiantamentos.pdf'
         );
+    }
+
+    protected function getFilteredQuery(): Builder
+    {
+        return SalaryAdvance::query()
+            ->when($this->company_id, fn (Builder $query) => $query->where('company_id', $this->company_id))
+            ->when($this->branch_id, fn (Builder $query) => $query->where('branch_id', $this->branch_id))
+            ->when($this->work_id, fn (Builder $query) => $query->where('work_id', $this->work_id))
+            ->when($this->status, fn (Builder $query) => $query->where('status', $this->status))
+            ->when($this->payment_method, fn (Builder $query) => $query->where('payment_method', $this->payment_method))
+            ->when($this->date_from, fn (Builder $query) => $query->whereDate('advance_date', '>=', $this->date_from))
+            ->when($this->date_to, fn (Builder $query) => $query->whereDate('advance_date', '<=', $this->date_to));
+    }
+
+    protected function formatStatus(?string $status): string
+    {
+        return match ($status) {
+            'draft' => 'Rascunho',
+            'paid' => 'Pago',
+            'canceled' => 'Cancelado',
+            'integrated_payroll' => 'Integrado na Folha',
+            default => $status ?: '-',
+        };
+    }
+
+    protected function formatPaymentMethod(?string $paymentMethod): string
+    {
+        return match ($paymentMethod) {
+            'pix' => 'PIX',
+            'bank_transfer' => 'Transferência',
+            'cash' => 'Dinheiro',
+            default => $paymentMethod ?: '-',
+        };
+    }
+
+    protected function formatPixKeyType(?string $pixKeyType): string
+    {
+        return match ($pixKeyType) {
+            'cpf' => 'CPF',
+            'cnpj' => 'CNPJ',
+            'email' => 'E-mail',
+            'phone' => 'Telefone',
+            'random' => 'Aleatória',
+            default => $pixKeyType ?: '-',
+        };
     }
 }

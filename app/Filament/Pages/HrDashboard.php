@@ -5,8 +5,11 @@ namespace App\Filament\Pages;
 use App\Filament\Widgets\EmployeesByDepartmentChart;
 use App\Filament\Widgets\EmployeesByWorkTable;
 use App\Filament\Widgets\HrStatsOverview;
+use App\Filament\Widgets\LatestSalaryAdvancesTable;
 use App\Filament\Widgets\PayrollSummaryStats;
 use App\Filament\Widgets\RecentEmployeesTable;
+use App\Filament\Widgets\SalaryAdvanceMonthlyChart;
+use App\Filament\Widgets\SalaryAdvanceStatsOverview;
 use BackedEnum;
 use Filament\Pages\Page;
 use UnitEnum;
@@ -29,6 +32,9 @@ class HrDashboard extends Page
             EmployeesByDepartmentChart::class,
             EmployeesByWorkTable::class,
             RecentEmployeesTable::class,
+            SalaryAdvanceStatsOverview::class,
+            SalaryAdvanceMonthlyChart::class,
+            LatestSalaryAdvancesTable::class,
         ];
     }
 }

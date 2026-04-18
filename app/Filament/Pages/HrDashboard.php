@@ -10,6 +10,7 @@ use App\Filament\Widgets\PayrollSummaryStats;
 use App\Filament\Widgets\RecentEmployeesTable;
 use App\Filament\Widgets\SalaryAdvanceMonthlyChart;
 use App\Filament\Widgets\SalaryAdvanceStatsOverview;
+use App\Filament\Widgets\TopWorksSalaryAdvancesTable;
 use BackedEnum;
 use Filament\Pages\Page;
 use UnitEnum;
@@ -33,6 +34,7 @@ class HrDashboard extends Page
             EmployeesByWorkTable::class,
             RecentEmployeesTable::class,
             SalaryAdvanceStatsOverview::class,
+            TopWorksSalaryAdvancesTable::class,
             SalaryAdvanceMonthlyChart::class,
             LatestSalaryAdvancesTable::class,
         ];

@@ -2,11 +2,8 @@
 
 namespace App\Filament\Resources\SalaryAdvances\Schemas;
 
-use App\Models\Branch;
-use App\Models\Company;
 use App\Models\Employee;
 use App\Models\PayrollCompetency;
-use App\Models\Work;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -28,69 +25,9 @@ class SalaryAdvanceForm
                 ->tabs([
                     Tab::make('Dados do Adiantamento')
                         ->schema([
-                            Select::make('company_id')
-                                ->label('Empresa')
-                                ->options(
-                                    Company::query()
-                                        ->where('is_active', true)
-                                        ->orderBy('name')
-                                        ->pluck('name', 'id')
-                                )
-                                ->searchable()
-                                ->preload()
-                                ->native(false)
-                                ->required()
-                                ->live()
-                                ->afterStateUpdated(function (Set $set) {
-                                    $set('branch_id', null);
-                                    $set('work_id', null);
-                                    $set('employee_id', null);
-
-                                    self::resetPaymentData($set);
-                                }),
-
-                            Select::make('branch_id')
-                                ->label('Filial')
-                                ->options(fn (Get $get) => Branch::query()
-                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                    ->where('is_active', true)
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id'))
-                                ->searchable()
-                                ->preload()
-                                ->native(false)
-                                ->live()
-                                ->afterStateUpdated(function (Set $set) {
-                                    $set('work_id', null);
-                                    $set('employee_id', null);
-
-                                    self::resetPaymentData($set);
-                                }),
-
-                            Select::make('work_id')
-                                ->label('Obra')
-                                ->options(fn (Get $get) => Work::query()
-                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                    ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
-                                    ->where('is_active', true)
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id'))
-                                ->searchable()
-                                ->preload()
-                                ->native(false)
-                                ->live()
-                                ->afterStateUpdated(function (Set $set) {
-                                    $set('employee_id', null);
-
-                                    self::resetPaymentData($set);
-                                }),
-
                             Select::make('employee_id')
                                 ->label('Colaborador')
-                                ->options(fn (Get $get) => Employee::query()
-                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                    ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
-                                    ->when($get('work_id'), fn ($query, $workId) => $query->where('work_id', $workId))
+                                ->options(fn () => Employee::query()
                                     ->where('is_active', true)
                                     ->where('status', 'active')
                                     ->orderBy('name')
@@ -100,21 +37,43 @@ class SalaryAdvanceForm
                                 ->native(false)
                                 ->required()
                                 ->live()
-                                ->afterStateUpdated(function ($state, Set $set) {
+                                ->afterStateUpdated(function ($state, Set $set): void {
                                     if (! $state) {
-                                        self::resetPaymentData($set);
+                                        self::resetEmployeeData($set);
                                         return;
                                     }
 
-                                    $employee = Employee::find($state);
+                                    $employee = Employee::query()
+                                        ->with(['company', 'branch', 'work'])
+                                        ->find($state);
 
                                     if (! $employee) {
-                                        self::resetPaymentData($set);
+                                        self::resetEmployeeData($set);
                                         return;
                                     }
 
+                                    self::fillEmployeeData($set, $employee);
                                     self::fillPaymentDataFromEmployee($set, $employee);
                                 }),
+
+                            Hidden::make('company_id'),
+                            Hidden::make('branch_id'),
+                            Hidden::make('work_id'),
+
+                            TextInput::make('company_name_display')
+                                ->label('Empresa')
+                                ->disabled()
+                                ->dehydrated(false),
+
+                            TextInput::make('branch_name_display')
+                                ->label('Filial')
+                                ->disabled()
+                                ->dehydrated(false),
+
+                            TextInput::make('work_name_display')
+                                ->label('Obra')
+                                ->disabled()
+                                ->dehydrated(false),
 
                             Select::make('payroll_competency_id')
                                 ->label('Competência')
@@ -187,7 +146,7 @@ class SalaryAdvanceForm
                                 ->native(false)
                                 ->required()
                                 ->live()
-                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                ->afterStateUpdated(function ($state, Set $set, Get $get): void {
                                     if ($state !== 'pix') {
                                         self::clearPixFields($set);
                                         return;
@@ -223,7 +182,7 @@ class SalaryAdvanceForm
                                 ->required(fn (Get $get) => $get('payment_method') === 'pix')
                                 ->visible(fn (Get $get) => $get('payment_method') === 'pix')
                                 ->live()
-                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                ->afterStateUpdated(function ($state, Set $set, Get $get): void {
                                     $display = $get('pix_key_display');
 
                                     if (blank($display)) {
@@ -251,14 +210,14 @@ class SalaryAdvanceForm
                                 ->placeholder(fn (Get $get) => match ($get('pix_key_type')) {
                                     'cpf' => '000.000.000-00',
                                     'cnpj' => '00.000.000/0000-00',
-                                    'email' => 'exemplo@dominio.com',
+                                    'email' => 'email@exemplo.com',
                                     'phone' => '(00) 00000-0000',
                                     'random' => 'Chave aleatória',
                                     default => 'Informe a chave',
                                 })
                                 ->live()
                                 ->dehydrated(false)
-                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                ->afterStateUpdated(function ($state, Set $set, Get $get): void {
                                     $formatted = self::formatPixKey($state, $get('pix_key_type'));
 
                                     if ($formatted !== $state) {
@@ -299,6 +258,30 @@ class SalaryAdvanceForm
         ]);
     }
 
+    protected static function resetEmployeeData(Set $set): void
+    {
+        $set('company_id', null);
+        $set('branch_id', null);
+        $set('work_id', null);
+
+        $set('company_name_display', null);
+        $set('branch_name_display', null);
+        $set('work_name_display', null);
+
+        self::resetPaymentData($set);
+    }
+
+    protected static function fillEmployeeData(Set $set, Employee $employee): void
+    {
+        $set('company_id', $employee->company_id);
+        $set('branch_id', $employee->branch_id);
+        $set('work_id', $employee->work_id);
+
+        $set('company_name_display', $employee->company?->name);
+        $set('branch_name_display', $employee->branch?->name);
+        $set('work_name_display', $employee->work?->name);
+    }
+
     protected static function resetPaymentData(Set $set): void
     {
         $set('payment_method', 'pix');
@@ -311,7 +294,7 @@ class SalaryAdvanceForm
         $pixKey = self::resolvePixKey($employee, $pixKeyType);
 
         if (blank($pixKeyType) || blank($pixKey)) {
-            $set('payment_method', 'pix');
+            $set('payment_method', $employee->payment_method ?: 'pix');
             self::clearPixFields($set);
             return;
         }
@@ -319,7 +302,7 @@ class SalaryAdvanceForm
         $formattedPixKey = self::formatPixKey($pixKey, $pixKeyType);
         $holderDocument = $employee->pix_holder_document ?: $employee->cpf;
 
-        $set('payment_method', 'pix');
+        $set('payment_method', $employee->payment_method ?: 'pix');
         $set('pix_holder_name', $employee->pix_holder_name ?: $employee->name);
         $set('pix_holder_document', self::formatDocument($holderDocument, $pixKeyType));
         $set('pix_key', self::normalizePixKey($formattedPixKey, $pixKeyType));
@@ -384,6 +367,7 @@ class SalaryAdvanceForm
 
         return match ($type) {
             'cpf', 'cnpj', 'phone' => self::digits($value),
+            'email' => trim(mb_strtolower((string) $value)),
             default => trim((string) $value),
         };
     }

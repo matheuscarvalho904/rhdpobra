@@ -39,23 +39,39 @@ class EmployeeForm
                         ->icon('heroicon-o-identification')
                         ->schema([
                             Section::make('Identificação e vínculo')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     TextInput::make('code')
                                         ->label('Código')
                                         ->maxLength(30)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
 
                                     TextInput::make('name')
                                         ->label('Nome')
                                         ->required()
                                         ->maxLength(255)
-                                        ->columnSpan(5),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 4,
+                                            'xl' => 5,
+                                        ]),
 
                                     TextInput::make('social_name')
                                         ->label('Nome Social')
                                         ->maxLength(255)
-                                        ->columnSpan(5),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 4,
+                                            'xl' => 5,
+                                        ]),
 
                                     Select::make('status')
                                         ->label('Status')
@@ -67,13 +83,21 @@ class EmployeeForm
                                         ])
                                         ->default('active')
                                         ->required()
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 2,
+                                        ]),
 
                                     Toggle::make('is_active')
                                         ->label('Ativo')
                                         ->inline(false)
                                         ->default(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 2,
+                                        ]),
 
                                     Select::make('company_id')
                                         ->label('Empresa')
@@ -84,8 +108,13 @@ class EmployeeForm
                                         ->searchable()
                                         ->preload()
                                         ->required()
+                                        ->native(false)
                                         ->live()
-                                        ->columnSpan(8)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 6,
+                                            'xl' => 4,
+                                        ])
                                         ->afterStateUpdated(function (Set $set): void {
                                             $set('branch_id', null);
                                             $set('work_id', null);
@@ -101,8 +130,13 @@ class EmployeeForm
                                         ->searchable()
                                         ->preload()
                                         ->required()
+                                        ->native(false)
                                         ->live()
-                                        ->columnSpan(6)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 4,
+                                        ])
                                         ->afterStateUpdated(function (Set $set): void {
                                             $set('work_id', null);
                                         }),
@@ -117,7 +151,12 @@ class EmployeeForm
                                             ->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(6),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 4,
+                                        ]),
                                 ]),
                         ]),
 
@@ -125,43 +164,69 @@ class EmployeeForm
                         ->icon('heroicon-o-document-text')
                         ->schema([
                             Section::make('Documentos principais')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     TextInput::make('cpf')
                                         ->label('CPF')
                                         ->maxLength(14)
                                         ->mask(RawJs::make("'999.999.999-99'"))
-                                        ->stripCharacters(['.', '-'])
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('rg')
                                         ->label('RG')
                                         ->maxLength(30)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('rg_issuer')
                                         ->label('Órgão Emissor')
                                         ->maxLength(20)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('pis')
                                         ->label('PIS')
                                         ->maxLength(14)
                                         ->mask(RawJs::make("'999.99999.99-9'"))
-                                        ->stripCharacters(['.', '-'])
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('ctps')
                                         ->label('CTPS')
                                         ->maxLength(30)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('ctps_series')
                                         ->label('Série CTPS')
                                         ->maxLength(20)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 3,
+                                        ]),
                                 ]),
                         ]),
 
@@ -169,11 +234,19 @@ class EmployeeForm
                         ->icon('heroicon-o-user')
                         ->schema([
                             Section::make('Informações pessoais')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     DatePicker::make('birth_date')
                                         ->label('Data de Nascimento')
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('gender')
                                         ->label('Sexo')
@@ -182,7 +255,11 @@ class EmployeeForm
                                             'female' => 'Feminino',
                                             'other' => 'Outro',
                                         ])
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('marital_status')
                                         ->label('Estado Civil')
@@ -193,27 +270,47 @@ class EmployeeForm
                                             'widowed' => 'Viúvo(a)',
                                             'stable_union' => 'União Estável',
                                         ])
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('nationality')
                                         ->label('Nacionalidade')
                                         ->maxLength(100)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('birthplace')
                                         ->label('Naturalidade')
                                         ->maxLength(100)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('mother_name')
                                         ->label('Nome da Mãe')
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('father_name')
                                         ->label('Nome do Pai')
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
                                 ]),
                         ]),
 
@@ -221,13 +318,21 @@ class EmployeeForm
                         ->icon('heroicon-o-map-pin')
                         ->schema([
                             Section::make('Contato')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     TextInput::make('email')
                                         ->label('E-mail')
                                         ->email()
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('phone')
                                         ->label('Telefone')
@@ -235,61 +340,96 @@ class EmployeeForm
                                         ->mask(RawJs::make(<<<'JS'
                                             $input.length > 14 ? '(99) 99999-9999' : '(99) 9999-9999'
                                         JS))
-                                        ->stripCharacters(['(', ')', ' ', '-'])
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('mobile')
                                         ->label('Celular')
                                         ->maxLength(15)
-                                        ->mask(RawJs::make(<<<'JS'
-                                            '(99) 99999-9999'
-                                        JS))
-                                        ->stripCharacters(['(', ')', ' ', '-'])
+                                        ->mask(RawJs::make("'(99) 99999-9999'"))
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
                                 ]),
 
                             Section::make('Endereço')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     TextInput::make('zip_code')
                                         ->label('CEP')
                                         ->maxLength(9)
                                         ->mask(RawJs::make("'99999-999'"))
-                                        ->stripCharacters(['-'])
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
 
                                     TextInput::make('address')
                                         ->label('Endereço')
                                         ->maxLength(255)
-                                        ->columnSpan(5),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 4,
+                                            'xl' => 5,
+                                        ]),
 
                                     TextInput::make('number')
                                         ->label('Número')
                                         ->maxLength(20)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
 
                                     TextInput::make('complement')
                                         ->label('Complemento')
                                         ->maxLength(255)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 4,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('district')
                                         ->label('Bairro')
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('city')
                                         ->label('Cidade')
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('state')
                                         ->label('UF')
                                         ->maxLength(2)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
                                 ]),
                         ]),
 
@@ -297,79 +437,107 @@ class EmployeeForm
                         ->icon('heroicon-o-briefcase')
                         ->schema([
                             Section::make('Lotação e cadastro funcional')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     Select::make('department_id')
                                         ->label('Departamento')
-                                        ->options(fn () => Department::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => Department::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('cost_center_id')
                                         ->label('Centro de Custo')
-                                        ->options(fn () => CostCenter::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => CostCenter::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('job_role_id')
                                         ->label('Cargo')
-                                        ->options(fn () => JobRole::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => JobRole::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('cbo_code_id')
                                         ->label('CBO')
-                                        ->options(fn () => CboCode::query()
-                                            ->orderBy('code')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => CboCode::query()->orderBy('code')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('labor_union_id')
                                         ->label('Sindicato')
-                                        ->options(fn () => LaborUnion::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => LaborUnion::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(4),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 4,
+                                        ]),
 
                                     Select::make('work_shift_id')
                                         ->label('Jornada de Trabalho')
-                                        ->options(fn () => WorkShift::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => WorkShift::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(4),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 4,
+                                        ]),
 
                                     DatePicker::make('admission_date')
                                         ->label('Data de Admissão')
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 2,
+                                        ]),
 
                                     DatePicker::make('termination_date')
                                         ->label('Data de Desligamento')
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 2,
+                                        ]),
                                 ]),
 
                             Section::make('Remuneração e contrato')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     TextInput::make('salary')
                                         ->label('Salário Base')
@@ -378,7 +546,11 @@ class EmployeeForm
                                         ->prefix('R$ ')
                                         ->dehydrateStateUsing(fn ($state) => self::moneyToDatabase($state))
                                         ->formatStateUsing(fn ($state) => self::moneyFromDatabase($state))
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('salary_advance_amount')
                                         ->label('Adiantamento Salarial')
@@ -387,7 +559,11 @@ class EmployeeForm
                                         ->default('0,00')
                                         ->dehydrateStateUsing(fn ($state) => self::moneyToDatabase($state) ?? 0)
                                         ->formatStateUsing(fn ($state) => self::moneyFromDatabase($state ?? 0))
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('payment_method')
                                         ->label('Forma de Pagamento')
@@ -397,7 +573,12 @@ class EmployeeForm
                                             'bank_deposit' => 'Depósito Bancário',
                                             'cash' => 'Dinheiro',
                                         ])
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Select::make('contract_type_id')
                                         ->label('Tipo de Contrato')
@@ -410,8 +591,13 @@ class EmployeeForm
                                         ->searchable()
                                         ->preload()
                                         ->required()
+                                        ->native(false)
                                         ->live()
-                                        ->columnSpan(3)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ])
                                         ->afterStateUpdated(function (?string $state, Set $set): void {
                                             $rules = ContractProcessingRuleService::getByContractTypeId(
                                                 $state ? (int) $state : null
@@ -441,32 +627,50 @@ class EmployeeForm
                         ->icon('heroicon-o-building-library')
                         ->schema([
                             Section::make('Dados bancários')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     Select::make('bank_id')
                                         ->label('Banco')
-                                        ->options(fn () => Bank::query()
-                                            ->orderBy('name')
-                                            ->pluck('name', 'id')
-                                            ->toArray())
+                                        ->options(fn () => Bank::query()->orderBy('name')->pluck('name', 'id')->toArray())
                                         ->searchable()
                                         ->preload()
-                                        ->columnSpan(3),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('bank_agency')
                                         ->label('Agência')
                                         ->maxLength(20)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('bank_account')
                                         ->label('Conta')
                                         ->maxLength(30)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('bank_account_digit')
                                         ->label('Dígito')
                                         ->maxLength(10)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 1,
+                                        ]),
 
                                     Select::make('bank_account_type')
                                         ->label('Tipo de Conta')
@@ -475,11 +679,20 @@ class EmployeeForm
                                             'savings' => 'Poupança',
                                             'salary' => 'Salário',
                                         ])
-                                        ->columnSpan(2),
+                                        ->native(false)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
                                 ]),
 
                             Section::make('Dados PIX')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     Select::make('pix_key_type')
                                         ->label('Tipo de Chave PIX')
@@ -490,8 +703,13 @@ class EmployeeForm
                                             'phone' => 'Telefone',
                                             'random' => 'Aleatória',
                                         ])
+                                        ->native(false)
                                         ->live()
-                                        ->columnSpan(3)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ])
                                         ->afterStateUpdated(function (Set $set): void {
                                             $set('pix_key', null);
                                             $set('pix_holder_document', null);
@@ -522,19 +740,27 @@ class EmployeeForm
                                             'random' => 'Informe a chave aleatória completa.',
                                             default => 'Escolha o tipo de chave para aplicar a máscara correta.',
                                         })
-                                        ->stripCharacters(['.', '-', '/', '(', ')', ' '])
                                         ->dehydrateStateUsing(function ($state, Get $get) {
                                             return match ($get('pix_key_type')) {
                                                 'cpf', 'cnpj', 'phone' => self::digits($state),
-                                                default => $state,
+                                                'email' => filled($state) ? trim(mb_strtolower((string) $state)) : null,
+                                                default => filled($state) ? trim((string) $state) : null,
                                             };
                                         })
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     TextInput::make('pix_holder_name')
                                         ->label('Titular da Chave PIX')
                                         ->maxLength(255)
-                                        ->columnSpan(4),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 4,
+                                        ]),
 
                                     TextInput::make('pix_holder_document')
                                         ->label('Documento do Titular')
@@ -547,9 +773,12 @@ class EmployeeForm
                                             ? '00.000.000/0000-00'
                                             : '000.000.000-00')
                                         ->helperText('A máscara muda conforme o tipo de documento esperado.')
-                                        ->stripCharacters(['.', '-', '/', '(', ')', ' '])
                                         ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
                                 ]),
                         ]),
 
@@ -558,72 +787,101 @@ class EmployeeForm
                         ->schema([
                             Section::make('Regras automáticas do vínculo')
                                 ->description('Esses campos podem ser ajustados manualmente quando necessário.')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     Select::make('processing_type')
                                         ->label('Tipo de Processamento')
                                         ->options(ContractProcessingRuleService::processingTypeOptions())
                                         ->default('payroll')
                                         ->required()
+                                        ->native(false)
                                         ->dehydrated(true)
-                                        ->columnSpan(3),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
 
                                     Toggle::make('generates_payroll')
                                         ->label('Gera Folha')
                                         ->inline(false)
                                         ->default(true)
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
 
                                     Toggle::make('generates_accounts_payable')
                                         ->label('Gera Contas a Pagar')
                                         ->inline(false)
                                         ->default(false)
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
 
                                     Toggle::make('allows_payslip')
                                         ->label('Permite Holerite / Comprovante')
                                         ->inline(false)
                                         ->default(true)
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
-                                        Toggle::make('has_fgts')
-                                            ->label('Tem FGTS')
-                                            ->inline(false)
-                                            ->default(true)
-                                            ->live()
-                                            ->afterStateHydrated(function (Set $set, $state, ?\App\Models\Employee $record) {
-                                                if (! $state) {
-                                                    $set('fgts_rate', 0);
-                                                    return;
-                                                }
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
 
-                                                $set('fgts_rate', $record?->fgts_rate ?? 8);
-                                            })
-                                            ->afterStateUpdated(function (Set $set, $state, Get $get): void {
-                                                if (! $state) {
-                                                    $set('fgts_rate', 0);
-                                                    return;
-                                                }
+                                    Toggle::make('has_fgts')
+                                        ->label('Tem FGTS')
+                                        ->inline(false)
+                                        ->default(true)
+                                        ->live()
+                                        ->afterStateHydrated(function (Set $set, $state, ?\App\Models\Employee $record) {
+                                            if (! $state) {
+                                                $set('fgts_rate', 0);
+                                                return;
+                                            }
 
-                                                $current = $get('fgts_rate');
+                                            $set('fgts_rate', $record?->fgts_rate ?? 8);
+                                        })
+                                        ->afterStateUpdated(function (Set $set, $state, Get $get): void {
+                                            if (! $state) {
+                                                $set('fgts_rate', 0);
+                                                return;
+                                            }
 
-                                                $set('fgts_rate', filled($current) ? $current : 8);
-                                            })
-                                            ->dehydrated(true)
-                                            ->columnSpan(2),
+                                            $current = $get('fgts_rate');
+                                            $set('fgts_rate', filled($current) ? $current : 8);
+                                        })
+                                        ->dehydrated(true)
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 1,
+                                        ]),
 
-                                        TextInput::make('fgts_rate')
-    ->label('Alíquota FGTS (%)')
-    ->numeric()
-    ->default(8)
-    ->disabled(fn (Get $get) => ! $get('has_fgts'))
-    ->dehydrated(true)
-    ->dehydrateStateUsing(function ($state, Get $get) {
-        return $get('has_fgts') ? ((float) ($state ?: 8)) : 0;
-    })
-    ->columnSpan(2),
+                                    TextInput::make('fgts_rate')
+                                        ->label('Alíquota FGTS (%)')
+                                        ->numeric()
+                                        ->default(8)
+                                        ->disabled(fn (Get $get) => ! $get('has_fgts'))
+                                        ->dehydrated(true)
+                                        ->dehydrateStateUsing(function ($state, Get $get) {
+                                            return $get('has_fgts') ? ((float) ($state ?: 8)) : 0;
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
 
                                     Toggle::make('has_inss')
                                         ->label('Tem INSS')
@@ -637,7 +895,11 @@ class EmployeeForm
                                                 $set('with_inss', false);
                                             }
                                         })
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 1,
+                                        ]),
 
                                     Toggle::make('inss_optional')
                                         ->label('INSS Opcional')
@@ -645,7 +907,11 @@ class EmployeeForm
                                         ->default(false)
                                         ->visible(fn (Get $get) => (bool) $get('has_inss'))
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 1,
+                                        ]),
 
                                     Toggle::make('with_inss')
                                         ->label('Reter INSS')
@@ -653,14 +919,22 @@ class EmployeeForm
                                         ->default(true)
                                         ->visible(fn (Get $get) => (bool) $get('has_inss'))
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 1,
+                                        ]),
 
                                     Toggle::make('has_irrf')
                                         ->label('Tem IRRF')
                                         ->inline(false)
                                         ->default(true)
                                         ->dehydrated(true)
-                                        ->columnSpan(2),
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 1,
+                                        ]),
                                 ]),
                         ]),
 
@@ -668,7 +942,11 @@ class EmployeeForm
                         ->icon('heroicon-o-chat-bubble-left-ellipsis')
                         ->schema([
                             Section::make('Informações complementares')
-                                ->columns(12)
+                                ->columns([
+                                    'default' => 1,
+                                    'md' => 6,
+                                    'xl' => 12,
+                                ])
                                 ->schema([
                                     Textarea::make('notes')
                                         ->label('Observações')

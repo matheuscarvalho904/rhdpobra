@@ -2,9 +2,15 @@
 
 namespace App\Filament\Resources\SalaryAdvances\Tables;
 
+use App\Services\SalaryAdvanceBatchReportService;
+use App\Services\SalaryAdvanceReportService;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\EditAction;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Collection;
 
 class SalaryAdvancesTable
 {
@@ -82,6 +88,56 @@ class SalaryAdvancesTable
             ])
             ->recordActions([
                 EditAction::make(),
+
+                Action::make('print_pix_payment')
+                    ->label('Relatório PIX')
+                    ->icon('heroicon-o-qr-code')
+                    ->color('success')
+                    ->action(function ($record) {
+                        try {
+                            $service = app(SalaryAdvanceReportService::class);
+                            $pdfContent = $service->output($record);
+
+                            return response()->streamDownload(
+                                fn () => print($pdfContent),
+                                'adiantamento-pix-' . ($record->id ?? 'arquivo') . '.pdf'
+                            );
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Erro ao gerar relatório PIX.')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return null;
+                        }
+                    }),
+            ])
+            ->toolbarActions([
+                BulkAction::make('print_pix_batch')
+                    ->label('Lote PIX em PDF')
+                    ->icon('heroicon-o-document-duplicate')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->action(function (Collection $records) {
+                        try {
+                            $service = app(SalaryAdvanceBatchReportService::class);
+                            $pdfContent = $service->output($records);
+
+                            return response()->streamDownload(
+                                fn () => print($pdfContent),
+                                'lote-adiantamentos-pix.pdf'
+                            );
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Erro ao gerar lote PIX.')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return null;
+                        }
+                    }),
             ]);
     }
 }

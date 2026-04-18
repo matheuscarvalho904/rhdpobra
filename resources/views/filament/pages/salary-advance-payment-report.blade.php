@@ -1,229 +1,204 @@
-<x-filament-panels::page>
-    <div class="space-y-6">
-        <div class="rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div class="border-b border-gray-200 px-6 py-4">
-                <h2 class="text-xl font-bold tracking-tight text-gray-900">
-                    Relatório de Pagamento de Adiantamento
-                </h2>
-                <p class="mt-1 text-sm text-gray-500">
-                    Filtre os dados por empresa, filial, obra, período, status e forma de pagamento.
-                </p>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório de Pagamento de Adiantamento</title>
+    <style>
+        @page { margin: 20px; }
+
+        body {
+            font-family: DejaVu Sans, sans-serif;
+            font-size: 11px;
+            color: #111827;
+        }
+
+        .header,
+        .section {
+            border: 1px solid #cbd5e1;
+            margin-bottom: 14px;
+        }
+
+        .header-title,
+        .section-title {
+            background: #e5e7eb;
+            padding: 8px 10px;
+            font-weight: bold;
+            border-bottom: 1px solid #cbd5e1;
+        }
+
+        .body {
+            padding: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td, th {
+            border: 1px solid #d1d5db;
+            padding: 6px 8px;
+            vertical-align: middle;
+        }
+
+        .no-border td {
+            border: none;
+            padding: 4px 0;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .center {
+            text-align: center;
+        }
+
+        .value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .pix-box {
+            text-align: center;
+            padding: 12px;
+        }
+
+        .payload-box {
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px dashed #94a3b8;
+            background: #f8fafc;
+        }
+
+        .small {
+            font-size: 9px;
+            color: #4b5563;
+            word-break: break-all;
+            line-height: 1.35;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .subtitle {
+            font-size: 10px;
+            color: #475569;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    @php
+        $formatCpf = function (?string $value): string {
+            $digits = preg_replace('/\D+/', '', (string) $value);
+
+            if (strlen($digits) !== 11) {
+                return $value ?: '-';
+            }
+
+            return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $digits);
+        };
+
+        $statusLabel = match ($salaryAdvance->status ?? null) {
+            'draft' => 'Rascunho',
+            'paid' => 'Pago',
+            'canceled' => 'Cancelado',
+            'integrated_payroll' => 'Integrado na Folha',
+            default => $salaryAdvance->status ?? '-',
+        };
+
+        $paymentMethodLabel = match ($salaryAdvance->payment_method ?? null) {
+            'pix' => 'PIX',
+            'bank_transfer' => 'Transferência',
+            'cash' => 'Dinheiro',
+            default => $salaryAdvance->payment_method ?? '-',
+        };
+
+        $pixTypeLabel = match ($pixKeyType ?? null) {
+            'cpf' => 'CPF',
+            'cnpj' => 'CNPJ',
+            'email' => 'E-mail',
+            'phone' => 'Telefone',
+            'random' => 'Chave Aleatória',
+            default => $pixKeyType ?? '-',
+        };
+    @endphp
+
+    <div class="header">
+        <div class="header-title">Relatório de Pagamento de Adiantamento</div>
+        <div class="body">
+            <div class="subtitle">
+                Documento gerado para conferência e pagamento via PIX.
             </div>
 
-            <div class="px-6 py-6">
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Empresa</label>
-                        <select wire:model.live="company_id"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                            <option value="">Todas</option>
-                            @foreach ($this->companies as $id => $name)
-                                <option value="{{ $id }}">{{ $name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Filial</label>
-                        <select wire:model.live="branch_id"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                            <option value="">Todas</option>
-                            @foreach ($this->branches as $id => $name)
-                                <option value="{{ $id }}">{{ $name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Obra</label>
-                        <select wire:model.live="work_id"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                            <option value="">Todas</option>
-                            @foreach ($this->works as $id => $name)
-                                <option value="{{ $id }}">{{ $name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Status</label>
-                        <select wire:model.live="status"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                            <option value="">Todos</option>
-                            <option value="draft">Rascunho</option>
-                            <option value="paid">Pago</option>
-                            <option value="canceled">Cancelado</option>
-                            <option value="integrated_payroll">Integrado na Folha</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Data Inicial</label>
-                        <input type="date" wire:model.live="date_from"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Data Final</label>
-                        <input type="date" wire:model.live="date_to"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-semibold text-gray-700">Pagamento</label>
-                        <select wire:model.live="payment_method"
-                            class="w-full rounded-xl border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500">
-                            <option value="">Todos</option>
-                            <option value="pix">PIX</option>
-                            <option value="bank_transfer">Transferência</option>
-                            <option value="cash">Dinheiro</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex flex-wrap items-center gap-3">
-                    <x-filament::button wire:click="generateReport" size="md">
-                        Gerar Relatório
-                    </x-filament::button>
-
-                    <x-filament::button color="success" wire:click="exportPdf" size="md" icon="heroicon-m-document-arrow-down">
-                        Exportar PDF
-                    </x-filament::button>
-                </div>
-            </div>
+            <table class="no-border" style="margin-top: 8px;">
+                <tr>
+                    <td><span class="label">Colaborador:</span> {{ $employee->name ?? '-' }}</td>
+                    <td><span class="label">CPF:</span> {{ $formatCpf($employee->cpf ?? null) }}</td>
+                </tr>
+                <tr>
+                    <td><span class="label">Empresa:</span> {{ $company?->name ?? '-' }}</td>
+                    <td><span class="label">Filial:</span> {{ $branch?->name ?? '-' }}</td>
+                </tr>
+                <tr>
+                    <td><span class="label">Obra:</span> {{ $work?->name ?? '-' }}</td>
+                    <td><span class="label">Data do Adiantamento:</span> {{ optional($salaryAdvance->advance_date)->format('d/m/Y') ?: '-' }}</td>
+                </tr>
+                <tr>
+                    <td><span class="label">Forma de Pagamento:</span> {{ $paymentMethodLabel }}</td>
+                    <td><span class="label">Status:</span> {{ $statusLabel }}</td>
+                </tr>
+            </table>
         </div>
+    </div>
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">Período</div>
-                <div class="mt-2 text-base font-bold text-gray-900">
-                    {{ $this->date_from ? \Carbon\Carbon::parse($this->date_from)->format('d/m/Y') : '--' }}
-                    até
-                    {{ $this->date_to ? \Carbon\Carbon::parse($this->date_to)->format('d/m/Y') : '--' }}
-                </div>
-            </div>
-
-            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">Forma de Pagamento</div>
-                <div class="mt-2 text-base font-bold text-gray-900">
-                    @switch($this->payment_method)
-                        @case('pix') PIX @break
-                        @case('bank_transfer') Transferência @break
-                        @case('cash') Dinheiro @break
-                        @default Todos
-                    @endswitch
-                </div>
-            </div>
-
-            <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">Total Geral</div>
-                <div class="mt-2 text-2xl font-bold text-primary-600">
-                    R$ {{ number_format($this->totalAmount, 2, ',', '.') }}
-                </div>
-            </div>
+    <div class="section">
+        <div class="section-title">Dados do Pagamento</div>
+        <div class="body">
+            <table>
+                <tr>
+                    <td style="width: 35%;"><strong>Valor</strong></td>
+                    <td class="right value">R$ {{ number_format((float) ($salaryAdvance->amount ?? 0), 2, ',', '.') }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Tipo da Chave PIX</strong></td>
+                    <td>{{ $pixTypeLabel }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Chave PIX</strong></td>
+                    <td>{{ $pixKey ?? '-' }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Favorecido</strong></td>
+                    <td>{{ $beneficiaryName ?? '-' }}</td>
+                </tr>
+                <tr>
+                    <td><strong>Documento do Favorecido</strong></td>
+                    <td>{{ $salaryAdvance->pix_holder_document ?? '-' }}</td>
+                </tr>
+            </table>
         </div>
+    </div>
 
-        <div class="space-y-6">
-            @forelse ($this->rows as $company => $works)
-                <div class="rounded-2xl border border-gray-200 bg-white shadow-sm">
-                    <div class="border-b border-gray-200 px-6 py-4">
-                        <h3 class="text-lg font-bold text-gray-900">
-                            Empresa: {{ $company }}
-                        </h3>
-                    </div>
+    <div class="section">
+        <div class="section-title">QR Code PIX para Pagamento</div>
+        <div class="body pix-box">
+            <div>
+                <img src="data:image/png;base64,{{ $qrCodePng }}" alt="QR Code PIX" style="width: 180px; height: 180px;">
+            </div>
 
-                    <div class="px-6 py-6 space-y-6">
-                        @foreach ($works as $work => $data)
-                            <div class="rounded-2xl border border-gray-200 overflow-hidden">
-                                <div class="flex items-center justify-between bg-gray-50 px-4 py-3">
-                                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">
-                                        Obra: {{ $work }}
-                                    </h4>
-                                    <div class="text-sm font-semibold text-gray-700">
-                                        Total da Obra:
-                                        <span class="text-gray-900">R$ {{ number_format($data['total'], 2, ',', '.') }}</span>
-                                    </div>
-                                </div>
+            <p style="margin: 10px 0 6px 0;">
+                <strong>Escaneie para pagar</strong>
+            </p>
 
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                        <thead class="bg-gray-100">
-                                            <tr>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Colaborador</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Matrícula</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Cargo</th>
-                                                <th class="px-4 py-3 text-center font-bold text-gray-700">Data</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Tipo PIX</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Chave PIX</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Documento</th>
-                                                <th class="px-4 py-3 text-right font-bold text-gray-700">Valor</th>
-                                            </tr>
-                                        </thead>
-
-                                        <tbody class="divide-y divide-gray-100 bg-white">
-                                            @foreach ($data['rows'] as $row)
-                                                <tr class="hover:bg-gray-50">
-                                                    <td class="px-4 py-3 font-medium text-gray-900">
-                                                        {{ $row['employee_name'] }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-700">
-                                                        {{ $row['code'] ?: '-' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-700">
-                                                        {{ $row['job_role'] ?: '-' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-center text-gray-700">
-                                                        {{ $row['advance_date'] }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-700 uppercase">
-                                                        {{ $row['pix_key_type'] ?: '-' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-700">
-                                                        {{ $row['pix_key'] ?: '-' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-700">
-                                                        {{ $row['pix_holder_document'] ?: '-' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right font-semibold text-gray-900">
-                                                        R$ {{ number_format($row['amount'], 2, ',', '.') }}
-                                                    </td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-
-                                        <tfoot class="bg-gray-50">
-                                            <tr>
-                                                <td colspan="7" class="px-4 py-3 text-right text-sm font-bold text-gray-700">
-                                                    Total da Obra
-                                                </td>
-                                                <td class="px-4 py-3 text-right text-sm font-bold text-primary-700">
-                                                    R$ {{ number_format($data['total'], 2, ',', '.') }}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @empty
-                <div class="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-                    <div class="text-base font-semibold text-gray-700">Nenhum dado gerado ainda.</div>
-                    <div class="mt-1 text-sm text-gray-500">
-                        Ajuste os filtros e clique em <strong>Gerar Relatório</strong>.
-                    </div>
-                </div>
-            @endforelse
-        </div>
-
-        <div class="rounded-2xl border border-primary-200 bg-primary-50 p-5 shadow-sm">
-            <div class="flex items-center justify-between">
-                <span class="text-base font-semibold text-primary-900">Total Geral do Relatório</span>
-                <span class="text-2xl font-bold text-primary-700">
-                    R$ {{ number_format($this->totalAmount, 2, ',', '.') }}
-                </span>
+            <div class="payload-box">
+                <div class="small">{{ $pixPayload ?? '-' }}</div>
             </div>
         </div>
     </div>
-</x-filament-panels::page>
+</body>
+</html>

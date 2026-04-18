@@ -22,7 +22,7 @@ class SalaryAdvanceResource extends Resource
     protected static ?string $modelLabel = 'Adiantamento';
     protected static ?string $pluralModelLabel = 'Adiantamentos';
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-banknotes';
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-banknotes';
     protected static string|UnitEnum|null $navigationGroup = 'Folha';
     protected static ?int $navigationSort = 6;
 

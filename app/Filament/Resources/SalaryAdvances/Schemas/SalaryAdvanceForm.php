@@ -12,7 +12,8 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
-use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -22,341 +23,280 @@ class SalaryAdvanceForm
 {
     public static function configure(Schema $schema): Schema
     {
-        return $schema
-            ->components([
-                Section::make('Dados do Adiantamento')
-                    ->columns([
-                        'default' => 1,
-                        'md' => 6,
-                        'xl' => 12,
-                    ])
-                    ->schema([
-                        Select::make('company_id')
-                            ->label('Empresa')
-                            ->options(
-                                Company::query()
+        return $schema->components([
+            Tabs::make('Adiantamento')
+                ->tabs([
+                    Tab::make('Dados do Adiantamento')
+                        ->schema([
+                            Select::make('company_id')
+                                ->label('Empresa')
+                                ->options(
+                                    Company::query()
+                                        ->where('is_active', true)
+                                        ->orderBy('name')
+                                        ->pluck('name', 'id')
+                                )
+                                ->searchable()
+                                ->preload()
+                                ->native(false)
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function (Set $set) {
+                                    $set('branch_id', null);
+                                    $set('work_id', null);
+                                    $set('employee_id', null);
+
+                                    self::resetPaymentData($set);
+                                }),
+
+                            Select::make('branch_id')
+                                ->label('Filial')
+                                ->options(fn (Get $get) => Branch::query()
+                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
                                     ->where('is_active', true)
                                     ->orderBy('name')
-                                    ->pluck('name', 'id')
-                            )
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->required()
-                            ->live()
-                            ->afterStateUpdated(function (Set $set) {
-                                $set('branch_id', null);
-                                $set('work_id', null);
-                                $set('employee_id', null);
+                                    ->pluck('name', 'id'))
+                                ->searchable()
+                                ->preload()
+                                ->native(false)
+                                ->live()
+                                ->afterStateUpdated(function (Set $set) {
+                                    $set('work_id', null);
+                                    $set('employee_id', null);
 
-                                self::resetPaymentData($set);
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
-
-                        Select::make('branch_id')
-                            ->label('Filial')
-                            ->options(fn (Get $get) => Branch::query()
-                                ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                ->where('is_active', true)
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->live()
-                            ->afterStateUpdated(function (Set $set) {
-                                $set('work_id', null);
-                                $set('employee_id', null);
-
-                                self::resetPaymentData($set);
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
-
-                        Select::make('work_id')
-                            ->label('Obra')
-                            ->options(fn (Get $get) => Work::query()
-                                ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
-                                ->where('is_active', true)
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->live()
-                            ->afterStateUpdated(function (Set $set) {
-                                $set('employee_id', null);
-
-                                self::resetPaymentData($set);
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 4,
-                            ]),
-
-                        Select::make('employee_id')
-                            ->label('Colaborador')
-                            ->options(fn (Get $get) => Employee::query()
-                                ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                                ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
-                                ->when($get('work_id'), fn ($query, $workId) => $query->where('work_id', $workId))
-                                ->where('is_active', true)
-                                ->where('status', 'active')
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->required()
-                            ->live()
-                            ->afterStateUpdated(function ($state, Set $set) {
-                                if (! $state) {
                                     self::resetPaymentData($set);
-                                    return;
-                                }
+                                }),
 
-                                $employee = Employee::find($state);
+                            Select::make('work_id')
+                                ->label('Obra')
+                                ->options(fn (Get $get) => Work::query()
+                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                    ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
+                                    ->where('is_active', true)
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id'))
+                                ->searchable()
+                                ->preload()
+                                ->native(false)
+                                ->live()
+                                ->afterStateUpdated(function (Set $set) {
+                                    $set('employee_id', null);
 
-                                if (! $employee) {
                                     self::resetPaymentData($set);
-                                    return;
-                                }
+                                }),
 
-                                self::fillPaymentDataFromEmployee($set, $employee);
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
+                            Select::make('employee_id')
+                                ->label('Colaborador')
+                                ->options(fn (Get $get) => Employee::query()
+                                    ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
+                                    ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
+                                    ->when($get('work_id'), fn ($query, $workId) => $query->where('work_id', $workId))
+                                    ->where('is_active', true)
+                                    ->where('status', 'active')
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id'))
+                                ->searchable()
+                                ->preload()
+                                ->native(false)
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, Set $set) {
+                                    if (! $state) {
+                                        self::resetPaymentData($set);
+                                        return;
+                                    }
 
-                        Select::make('payroll_competency_id')
-                            ->label('Competência')
-                            ->options(
-                                PayrollCompetency::query()
-                                    ->orderByDesc('year')
-                                    ->orderByDesc('month')
-                                    ->get()
-                                    ->mapWithKeys(fn ($item) => [
-                                        $item->id => sprintf(
-                                            '%02d/%04d - %s',
-                                            $item->month,
-                                            $item->year,
-                                            match ($item->type) {
-                                                'monthly' => 'Mensal',
-                                                'vacation' => 'Férias',
-                                                'thirteenth' => '13º',
-                                                'termination' => 'Rescisão',
-                                                'advance' => 'Adiantamento',
-                                                default => $item->type,
-                                            }
-                                        ),
-                                    ])
-                            )
-                            ->searchable()
-                            ->preload()
-                            ->native(false)
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 3,
-                            ]),
+                                    $employee = Employee::find($state);
 
-                        DatePicker::make('advance_date')
-                            ->label('Data do Adiantamento')
-                            ->required()
-                            ->native(false)
-                            ->displayFormat('d/m/Y')
-                            ->default(now())
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 3,
-                                'xl' => 2,
-                            ]),
+                                    if (! $employee) {
+                                        self::resetPaymentData($set);
+                                        return;
+                                    }
 
-                        TextInput::make('amount')
-                            ->label('Valor')
-                            ->required()
-                            ->prefix('R$')
-                            ->mask(RawJs::make(<<<'JS'
-                                $money($input, ',', '.', 2)
-                            JS))
-                            ->formatStateUsing(fn ($state) => self::formatMoneyForInput($state))
-                            ->dehydrateStateUsing(fn ($state) => self::normalizeMoneyToDatabase($state))
-                            ->default('0,00')
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 3,
-                                'xl' => 2,
-                            ]),
+                                    self::fillPaymentDataFromEmployee($set, $employee);
+                                }),
 
-                        Select::make('status')
-                            ->label('Status')
-                            ->options([
-                                'draft' => 'Rascunho',
-                                'paid' => 'Pago',
-                                'canceled' => 'Cancelado',
-                                'integrated_payroll' => 'Integrado na Folha',
-                            ])
-                            ->default('draft')
-                            ->native(false)
-                            ->required()
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 3,
-                                'xl' => 2,
-                            ]),
+                            Select::make('payroll_competency_id')
+                                ->label('Competência')
+                                ->options(
+                                    PayrollCompetency::query()
+                                        ->orderByDesc('year')
+                                        ->orderByDesc('month')
+                                        ->get()
+                                        ->mapWithKeys(fn ($item) => [
+                                            $item->id => sprintf(
+                                                '%02d/%04d - %s',
+                                                $item->month,
+                                                $item->year,
+                                                match ($item->type) {
+                                                    'monthly' => 'Mensal',
+                                                    'vacation' => 'Férias',
+                                                    'thirteenth' => '13º',
+                                                    'termination' => 'Rescisão',
+                                                    'advance' => 'Adiantamento',
+                                                    default => $item->type,
+                                                }
+                                            ),
+                                        ])
+                                )
+                                ->searchable()
+                                ->preload()
+                                ->native(false),
 
-                        Select::make('payment_method')
-                            ->label('Forma de Pagamento')
-                            ->options([
-                                'pix' => 'PIX',
-                                'bank_transfer' => 'Transferência',
-                                'cash' => 'Dinheiro',
-                            ])
-                            ->default('pix')
-                            ->native(false)
-                            ->required()
-                            ->live()
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                if ($state !== 'pix') {
-                                    self::clearPixFields($set);
-                                    return;
-                                }
+                            DatePicker::make('advance_date')
+                                ->label('Data do Adiantamento')
+                                ->required()
+                                ->native(false)
+                                ->displayFormat('d/m/Y')
+                                ->default(now()),
 
-                                $employeeId = $get('employee_id');
+                            TextInput::make('amount')
+                                ->label('Valor')
+                                ->required()
+                                ->prefix('R$')
+                                ->mask(RawJs::make(<<<'JS'
+                                    $money($input, ',', '.', 2)
+                                JS))
+                                ->formatStateUsing(fn ($state) => self::formatMoneyForInput($state))
+                                ->dehydrateStateUsing(fn ($state) => self::normalizeMoneyToDatabase($state))
+                                ->default('0,00'),
 
-                                if (! $employeeId) {
-                                    self::clearPixFields($set);
-                                    return;
-                                }
+                            Select::make('status')
+                                ->label('Status')
+                                ->options([
+                                    'draft' => 'Rascunho',
+                                    'paid' => 'Pago',
+                                    'canceled' => 'Cancelado',
+                                    'integrated_payroll' => 'Integrado na Folha',
+                                ])
+                                ->default('draft')
+                                ->native(false)
+                                ->required(),
+                        ]),
 
-                                $employee = Employee::find($employeeId);
+                    Tab::make('Pagamento / PIX')
+                        ->schema([
+                            Select::make('payment_method')
+                                ->label('Forma de Pagamento')
+                                ->options([
+                                    'pix' => 'PIX',
+                                    'bank_transfer' => 'Transferência',
+                                    'cash' => 'Dinheiro',
+                                ])
+                                ->default('pix')
+                                ->native(false)
+                                ->required()
+                                ->live()
+                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                    if ($state !== 'pix') {
+                                        self::clearPixFields($set);
+                                        return;
+                                    }
 
-                                if (! $employee) {
-                                    self::clearPixFields($set);
-                                    return;
-                                }
+                                    $employeeId = $get('employee_id');
 
-                                self::fillPaymentDataFromEmployee($set, $employee);
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 3,
-                                'xl' => 3,
-                            ]),
+                                    if (! $employeeId) {
+                                        self::clearPixFields($set);
+                                        return;
+                                    }
 
-                        Select::make('pix_key_type')
-                            ->label('Tipo de Chave PIX')
-                            ->options([
-                                'cpf' => 'CPF',
-                                'cnpj' => 'CNPJ',
-                                'email' => 'E-mail',
-                                'phone' => 'Telefone',
-                                'random' => 'Aleatória',
-                            ])
-                            ->native(false)
-                            ->required(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->visible(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->live()
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                $display = $get('pix_key_display');
+                                    $employee = Employee::find($employeeId);
 
-                                if (blank($display)) {
-                                    return;
-                                }
+                                    if (! $employee) {
+                                        self::clearPixFields($set);
+                                        return;
+                                    }
 
-                                $formatted = self::formatPixKey($display, $state);
+                                    self::fillPaymentDataFromEmployee($set, $employee);
+                                }),
 
-                                $set('pix_key_display', $formatted);
-                                $set('pix_key', self::normalizePixKey($formatted, $state));
+                            Select::make('pix_key_type')
+                                ->label('Tipo de Chave PIX')
+                                ->options([
+                                    'cpf' => 'CPF',
+                                    'cnpj' => 'CNPJ',
+                                    'email' => 'E-mail',
+                                    'phone' => 'Telefone',
+                                    'random' => 'Aleatória',
+                                ])
+                                ->native(false)
+                                ->required(fn (Get $get) => $get('payment_method') === 'pix')
+                                ->visible(fn (Get $get) => $get('payment_method') === 'pix')
+                                ->live()
+                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                    $display = $get('pix_key_display');
 
-                                $holderDocument = $get('pix_holder_document');
+                                    if (blank($display)) {
+                                        return;
+                                    }
 
-                                if (filled($holderDocument)) {
-                                    $set('pix_holder_document', self::formatDocument($holderDocument, $state));
-                                }
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
+                                    $formatted = self::formatPixKey($display, $state);
 
-                        Hidden::make('pix_key'),
-
-                        TextInput::make('pix_key_display')
-                            ->label('Chave PIX')
-                            ->required(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->visible(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->placeholder(fn (Get $get) => match ($get('pix_key_type')) {
-                                'cpf' => '000.000.000-00',
-                                'cnpj' => '00.000.000/0000-00',
-                                'email' => 'exemplo@dominio.com',
-                                'phone' => '(00) 00000-0000',
-                                'random' => 'Chave aleatória',
-                                default => 'Informe a chave',
-                            })
-                            ->live()
-                            ->dehydrated(false)
-                            ->afterStateUpdated(function ($state, Set $set, Get $get) {
-                                $formatted = self::formatPixKey($state, $get('pix_key_type'));
-
-                                if ($formatted !== $state) {
                                     $set('pix_key_display', $formatted);
-                                }
+                                    $set('pix_key', self::normalizePixKey($formatted, $state));
 
-                                $set('pix_key', self::normalizePixKey($formatted, $get('pix_key_type')));
-                            })
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
+                                    $holderDocument = $get('pix_holder_document');
 
-                        TextInput::make('pix_holder_name')
-                            ->label('Favorecido')
-                            ->maxLength(255)
-                            ->visible(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
+                                    if (filled($holderDocument)) {
+                                        $set('pix_holder_document', self::formatDocument($holderDocument, $state));
+                                    }
+                                }),
 
-                        TextInput::make('pix_holder_document')
-                            ->label('CPF/CNPJ Favorecido')
-                            ->maxLength(30)
-                            ->visible(fn (Get $get) => $get('payment_method') === 'pix')
-                            ->placeholder(fn (Get $get) => $get('pix_key_type') === 'cnpj'
-                                ? '00.000.000/0000-00'
-                                : '000.000.000-00')
-                            ->mask(fn (Get $get) => match ($get('pix_key_type')) {
-                                'cnpj' => RawJs::make("'99.999.999/9999-99'"),
-                                default => RawJs::make("'999.999.999-99'"),
-                            })
-                            ->dehydrateStateUsing(fn ($state) => self::digits($state))
-                            ->columnSpan([
-                                'default' => 1,
-                                'md' => 6,
-                                'xl' => 6,
-                            ]),
+                            Hidden::make('pix_key'),
 
-                        Textarea::make('notes')
-                            ->label('Observações')
-                            ->rows(3)
-                            ->columnSpanFull(),
-                    ]),
-            ]);
+                            TextInput::make('pix_key_display')
+                                ->label('Chave PIX')
+                                ->required(fn (Get $get) => $get('payment_method') === 'pix')
+                                ->visible(fn (Get $get) => $get('payment_method') === 'pix')
+                                ->placeholder(fn (Get $get) => match ($get('pix_key_type')) {
+                                    'cpf' => '000.000.000-00',
+                                    'cnpj' => '00.000.000/0000-00',
+                                    'email' => 'exemplo@dominio.com',
+                                    'phone' => '(00) 00000-0000',
+                                    'random' => 'Chave aleatória',
+                                    default => 'Informe a chave',
+                                })
+                                ->live()
+                                ->dehydrated(false)
+                                ->afterStateUpdated(function ($state, Set $set, Get $get) {
+                                    $formatted = self::formatPixKey($state, $get('pix_key_type'));
+
+                                    if ($formatted !== $state) {
+                                        $set('pix_key_display', $formatted);
+                                    }
+
+                                    $set('pix_key', self::normalizePixKey($formatted, $get('pix_key_type')));
+                                }),
+
+                            TextInput::make('pix_holder_name')
+                                ->label('Favorecido')
+                                ->maxLength(255)
+                                ->visible(fn (Get $get) => $get('payment_method') === 'pix'),
+
+                            TextInput::make('pix_holder_document')
+                                ->label('CPF/CNPJ Favorecido')
+                                ->maxLength(30)
+                                ->visible(fn (Get $get) => $get('payment_method') === 'pix')
+                                ->placeholder(fn (Get $get) => $get('pix_key_type') === 'cnpj'
+                                    ? '00.000.000/0000-00'
+                                    : '000.000.000-00')
+                                ->mask(fn (Get $get) => match ($get('pix_key_type')) {
+                                    'cnpj' => RawJs::make("'99.999.999/9999-99'"),
+                                    default => RawJs::make("'999.999.999-99'"),
+                                })
+                                ->dehydrateStateUsing(fn ($state) => self::digits($state)),
+                        ]),
+
+                    Tab::make('Observações')
+                        ->schema([
+                            Textarea::make('notes')
+                                ->label('Observações')
+                                ->rows(4),
+                        ]),
+                ])
+                ->persistTabInQueryString()
+                ->columnSpanFull(),
+        ]);
     }
 
     protected static function resetPaymentData(Set $set): void
@@ -371,7 +311,7 @@ class SalaryAdvanceForm
         $pixKey = self::resolvePixKey($employee, $pixKeyType);
 
         if (blank($pixKeyType) || blank($pixKey)) {
-            $set('payment_method', $employee->payment_method ?: 'pix');
+            $set('payment_method', 'pix');
             self::clearPixFields($set);
             return;
         }

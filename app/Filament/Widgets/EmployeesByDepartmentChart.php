@@ -8,18 +8,19 @@ use Illuminate\Support\Facades\DB;
 
 class EmployeesByDepartmentChart extends ChartWidget
 {
-    protected static ?string $heading = 'Funcionários por Departamento';
+    protected static ?string $heading = 'Colaboradores por Departamento';
 
     protected function getData(): array
     {
-        $rows = Employee::query()
-            ->select([
-                DB::raw('COALESCE(departments.name, "Sem Departamento") as department_name'),
-                DB::raw('COUNT(employees.id) as total'),
-            ])
+        $data = Employee::query()
+            ->selectRaw("
+                COALESCE(departments.name, 'Sem Departamento') as department_name,
+                COUNT(employees.id) as total
+            ")
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
             ->where('employees.is_active', true)
             ->where('employees.status', 'active')
+            ->whereNull('employees.deleted_at')
             ->groupBy('departments.name')
             ->orderByDesc('total')
             ->get();
@@ -27,11 +28,11 @@ class EmployeesByDepartmentChart extends ChartWidget
         return [
             'datasets' => [
                 [
-                    'label' => 'Ativos',
-                    'data' => $rows->pluck('total')->map(fn ($value) => (int) $value)->all(),
+                    'label' => 'Colaboradores',
+                    'data' => $data->pluck('total')->toArray(),
                 ],
             ],
-            'labels' => $rows->pluck('department_name')->all(),
+            'labels' => $data->pluck('department_name')->toArray(),
         ];
     }
 

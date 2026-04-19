@@ -18,7 +18,12 @@ class BirthdaysThisMonthWidget extends BaseWidget
     public function table(Table $table): Table
     {
         return $table
-            ->query($this->getTableQuery())
+            ->query(
+                Employee::query()
+                    ->with(['company', 'branch', 'work', 'jobRole'])
+                    ->whereNotNull('birth_date')
+                    ->whereMonth('birth_date', now()->month)
+            )
             ->defaultSort('birth_date')
             ->columns([
                 Tables\Columns\TextColumn::make('name')
@@ -33,19 +38,14 @@ class BirthdaysThisMonthWidget extends BaseWidget
                     ->label('Dia')
                     ->state(fn (Employee $record) => $record->birth_date ? Carbon::parse($record->birth_date)->format('d') : '-')
                     ->alignCenter(),
+
                 Tables\Columns\TextColumn::make('birthday_today')
-                ->label('Hoje?')
-                ->state(function (Employee $record) {
-                    if (! $record->birth_date) {
-                        return '-';
-                    }
-
-                    $birthDate = Carbon::parse($record->birth_date);
-
-                    return $birthDate->day === now()->day && $birthDate->month === now()->month
-                        ? '🎉 Hoje'
-                        : '-';
-                }),
+                    ->label('Hoje?')
+                    ->state(fn (Employee $record) => $record->birth_date
+                        && Carbon::parse($record->birth_date)->day === now()->day
+                        && Carbon::parse($record->birth_date)->month === now()->month
+                            ? '🎉 Hoje'
+                            : '-'),
 
                 Tables\Columns\TextColumn::make('company.name')
                     ->label('Empresa')
@@ -70,16 +70,5 @@ class BirthdaysThisMonthWidget extends BaseWidget
             ->paginated([10, 25, 50])
             ->emptyStateHeading('Nenhum aniversariante neste mês.')
             ->emptyStateDescription('Quando houver colaboradores com aniversário no mês atual, eles aparecerão aqui.');
-    }
-
-    protected function getTableQuery(): Builder
-    {
-        $month = now()->month;
-
-        return Employee::query()
-            ->with(['company', 'branch', 'work', 'jobRole'])
-            ->whereNotNull('birth_date')
-            ->whereMonth('birth_date', $month)
-            ->orderByRaw('DAY(birth_date) asc');
     }
 }

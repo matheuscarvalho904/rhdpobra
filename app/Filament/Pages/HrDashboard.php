@@ -33,7 +33,6 @@ class HrDashboard extends Page
             EmployeesByWorkTable::class,
             RecentEmployeesTable::class,
             SalaryAdvanceStatsOverview::class,
-            TopWorksSalaryAdvancesTable::class,
             SalaryAdvanceMonthlyChart::class,
             LatestSalaryAdvancesTable::class,
         ];

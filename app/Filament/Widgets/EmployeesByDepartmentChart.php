@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class EmployeesByDepartmentChart extends ChartWidget
 {
-    protected ?string $heading = 'Funcionários por Departamento';
+    protected static ?string $heading = 'Funcionários por Departamento';
 
     protected function getData(): array
     {
@@ -28,7 +28,7 @@ class EmployeesByDepartmentChart extends ChartWidget
             'datasets' => [
                 [
                     'label' => 'Ativos',
-                    'data' => $rows->pluck('total')->all(),
+                    'data' => $rows->pluck('total')->map(fn ($value) => (int) $value)->all(),
                 ],
             ],
             'labels' => $rows->pluck('department_name')->all(),

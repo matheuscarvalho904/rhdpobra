@@ -33,13 +33,29 @@ class EmployeesByWorkTable extends BaseWidget
     {
         return Employee::query()
             ->leftJoin('works', 'works.id', '=', 'employees.work_id')
-            ->selectRaw('COALESCE(MIN(employees.id), 0) as id')
+            ->selectRaw("
+                CASE
+                    WHEN employees.work_id IS NULL THEN 'sem-obra'
+                    ELSE 'work-' || employees.work_id::text
+                END as record_key
+            ")
             ->selectRaw("COALESCE(works.name, 'Sem Obra') as work_name")
             ->selectRaw('COUNT(employees.id) as total_active')
             ->where('employees.is_active', true)
             ->where('employees.status', 'active')
             ->whereNull('employees.deleted_at')
-            ->groupByRaw("COALESCE(works.name, 'Sem Obra')")
+            ->groupByRaw("
+                CASE
+                    WHEN employees.work_id IS NULL THEN 'sem-obra'
+                    ELSE 'work-' || employees.work_id::text
+                END,
+                COALESCE(works.name, 'Sem Obra')
+            ")
             ->orderByDesc('total_active');
+    }
+
+    public function getTableRecordKey(mixed $record): string
+    {
+        return (string) ($record->record_key ?? 'sem-registro');
     }
 }

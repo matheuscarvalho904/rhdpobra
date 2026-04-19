@@ -30,7 +30,6 @@ class HrDashboard extends Page
         return [
             HrStatsOverview::class,
             PayrollSummaryStats::class,
-            EmployeesByWorkTable::class,
             RecentEmployeesTable::class,
             SalaryAdvanceStatsOverview::class,
             SalaryAdvanceMonthlyChart::class,

@@ -7,7 +7,6 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 class EmployeesByWorkTable extends BaseWidget
 {
@@ -35,11 +34,12 @@ class EmployeesByWorkTable extends BaseWidget
         return Employee::query()
             ->leftJoin('works', 'works.id', '=', 'employees.work_id')
             ->selectRaw('COALESCE(employees.work_id, 0) as record_key')
-            ->selectRaw('COALESCE(works.name, "Sem Obra") as work_name')
+            ->selectRaw("COALESCE(works.name, 'Sem Obra') as work_name")
             ->selectRaw('COUNT(employees.id) as total_active')
             ->where('employees.is_active', true)
             ->where('employees.status', 'active')
-            ->groupByRaw('COALESCE(employees.work_id, 0), COALESCE(works.name, "Sem Obra")');
+            ->whereNull('employees.deleted_at')
+            ->groupByRaw("COALESCE(employees.work_id, 0), COALESCE(works.name, 'Sem Obra')");
     }
 
     public function getTableRecordKey(mixed $record): string

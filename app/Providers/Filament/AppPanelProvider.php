@@ -29,7 +29,7 @@ class AppPanelProvider extends PanelProvider
             ->login()
             ->brandName('VOKTAR - ERP')
             ->brandLogo(asset('storage/logos/LOGO55.png'))
-            ->brandLogoHeight('80px')
+            ->brandLogoHeight('100px')
             ->favicon(asset('storage/logos/favicon.png'))
             ->colors([
                 'primary' => Color::Amber,

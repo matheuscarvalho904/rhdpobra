@@ -74,4 +74,10 @@ class EmployeeResource extends Resource
             'edit' => EditEmployee::route('/{record}/edit'),
         ];
     }
+    public static function getRelations(): array
+{
+    return [
+        \App\Filament\Resources\Employees\RelationManagers\FilesRelationManager::class,
+    ];
+}
 }

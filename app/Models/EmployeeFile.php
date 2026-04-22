@@ -13,10 +13,13 @@ class EmployeeFile extends Model
         'file_name',
         'file_path',
         'generated_at',
+        'is_active',
+        'notes',
     ];
 
     protected $casts = [
         'generated_at' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
     public function employee(): BelongsTo

@@ -516,4 +516,5 @@ class Employee extends Model
 {
     return $this->hasMany(EmployeeFile::class);
 }
+
 }

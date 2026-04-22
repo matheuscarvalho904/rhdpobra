@@ -7,9 +7,11 @@ use App\Models\Company;
 use App\Models\ContractType;
 use App\Models\CostCenter;
 use App\Models\Department;
+use App\Models\EmployeeFile;
 use App\Models\JobRole;
 use App\Models\Work;
 use App\Models\WorkShift;
+use App\Services\EmployeeContractDocumentService;
 use App\Services\EmployeeRehireService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -24,6 +26,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
 
 class EmployeesTable
 {
@@ -76,8 +79,8 @@ class EmployeesTable
                         'CLT' => 'success',
                         'APRENDIZ' => 'info',
                         'ESTÁGIO', 'ESTAGIO' => 'warning',
-                        'PESSOA FÍSICA', 'PF', 'AUTÔNOMO', 'AUTONOMO' => 'primary',
-                        'PESSOA JURÍDICA', 'PJ' => 'gray',
+                        'PESSOA FÍSICA', 'PESSOA FISICA', 'PF', 'AUTÔNOMO', 'AUTONOMO', 'RPA' => 'primary',
+                        'PESSOA JURÍDICA', 'PESSOA JURIDICA', 'PJ' => 'gray',
                         default => 'gray',
                     })
                     ->sortable()
@@ -293,6 +296,47 @@ class EmployeesTable
 
                 EditAction::make()
                     ->label('Editar'),
+
+                Action::make('generate_contract')
+                    ->label('Gerar Contrato')
+                    ->icon('heroicon-o-document-text')
+                    ->color('success')
+                    ->action(function ($record) {
+                        try {
+                            $service = app(EmployeeContractDocumentService::class);
+                            $pdfContent = $service->output($record);
+                            $fileName = $service->suggestFileName($record);
+                            $filePath = 'employees/contracts/' . $fileName;
+
+                            Storage::disk('public')->put($filePath, $pdfContent);
+
+                            EmployeeFile::create([
+                                'employee_id' => $record->id,
+                                'type' => 'contrato',
+                                'file_name' => $fileName,
+                                'file_path' => $filePath,
+                                'generated_at' => now(),
+                            ]);
+
+                            Notification::make()
+                                ->title('Contrato gerado com sucesso.')
+                                ->success()
+                                ->send();
+
+                            return response()->streamDownload(
+                                fn () => print($pdfContent),
+                                $fileName
+                            );
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Erro ao gerar contrato.')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return null;
+                        }
+                    }),
 
                 Action::make('rehire')
                     ->label('Recontratar')

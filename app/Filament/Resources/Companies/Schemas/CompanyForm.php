@@ -47,7 +47,29 @@ class CompanyForm
                             ->default(true)
                             ->columnSpan(1),
                     ]),
+                    Section::make('Dados do Representante')
+                    
+                    ->schema([
+                        TextInput::make('legal_representative_name')
+                        ->label('Representante Legal')
+                        ->maxLength(255),
 
+                    TextInput::make('legal_representative_cpf')
+                        ->label('CPF do Representante')
+                        ->maxLength(14)
+                        ->mask(\Filament\Support\RawJs::make("'999.999.999-99'"))
+                        ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state)),
+
+                    TextInput::make('legal_representative_rg')
+                        ->label('RG do Representante')
+                        ->maxLength(30),
+
+                    TextInput::make('legal_representative_role')
+                        ->label('Cargo do Representante')
+                        ->maxLength(100),
+
+                    ]),
+                    
                 Section::make('Endereço e Contato')
                     
                     ->schema([

@@ -127,6 +127,14 @@ class Employee extends Model
         'inss_optional',
         'with_inss',
 
+        'has_experience_period',
+        'experience_model',
+        'experience_days_first',
+        'experience_days_second',
+        'experience_total_days',
+        'experience_start_date',
+        'experience_end_date',
+
         /*
         |--------------------------------------------------------------------------
         | CONTROLE
@@ -173,6 +181,13 @@ class Employee extends Model
         'has_irrf' => 'boolean',
         'inss_optional' => 'boolean',
         'with_inss' => 'boolean',
+
+        'has_experience_period' => 'boolean',
+        'experience_days_first' => 'integer',
+        'experience_days_second' => 'integer',
+        'experience_total_days' => 'integer',
+        'experience_start_date' => 'date',
+        'experience_end_date' => 'date',
     ];
 
     protected $attributes = [
@@ -496,4 +511,9 @@ class Employee extends Model
     {
         return $this->hasMany(EmployeeTermination::class);
     }
+
+    public function files(): HasMany
+{
+    return $this->hasMany(EmployeeFile::class);
+}
 }

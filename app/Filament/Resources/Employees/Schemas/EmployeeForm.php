@@ -14,6 +14,7 @@ use App\Models\LaborUnion;
 use App\Models\Work;
 use App\Models\WorkShift;
 use App\Services\ContractProcessingRuleService;
+use Carbon\Carbon;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -517,11 +518,18 @@ class EmployeeForm
 
                                     DatePicker::make('admission_date')
                                         ->label('Data de Admissão')
+                                        ->live()
                                         ->columnSpan([
                                             'default' => 1,
                                             'md' => 3,
                                             'xl' => 2,
-                                        ]),
+                                        ])
+                                        ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                            if ($get('has_experience_period')) {
+                                                $set('experience_start_date', $state);
+                                                self::recalculateExperienceDates($set, $get);
+                                            }
+                                        }),
 
                                     DatePicker::make('termination_date')
                                         ->label('Data de Desligamento')
@@ -598,7 +606,7 @@ class EmployeeForm
                                             'md' => 2,
                                             'xl' => 3,
                                         ])
-                                        ->afterStateUpdated(function (?string $state, Set $set): void {
+                                        ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
                                             $rules = ContractProcessingRuleService::getByContractTypeId(
                                                 $state ? (int) $state : null
                                             );
@@ -619,7 +627,164 @@ class EmployeeForm
                                             $set('with_inss', $hasInss ? (bool) ($rules['with_inss'] ?? true) : false);
 
                                             $set('has_irrf', (bool) ($rules['has_irrf'] ?? true));
+
+                                            if (! self::isCltContract($state ? (int) $state : null)) {
+                                                $set('has_experience_period', false);
+                                                $set('experience_model', null);
+                                                $set('experience_days_first', null);
+                                                $set('experience_days_second', null);
+                                                $set('experience_total_days', null);
+                                                $set('experience_start_date', null);
+                                                $set('experience_end_date', null);
+                                            } elseif ($get('has_experience_period')) {
+                                                if (! $get('experience_start_date') && $get('admission_date')) {
+                                                    $set('experience_start_date', $get('admission_date'));
+                                                }
+
+                                                self::applyExperienceModel($set, $get, $get('experience_model'));
+                                            }
                                         }),
+
+                                    Toggle::make('has_experience_period')
+                                        ->label('Contrato com Experiência')
+                                        ->inline(false)
+                                        ->default(false)
+                                        ->live()
+                                        ->visible(fn (Get $get) => self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
+                                        ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                            if (! $state) {
+                                                $set('experience_model', null);
+                                                $set('experience_days_first', null);
+                                                $set('experience_days_second', null);
+                                                $set('experience_total_days', null);
+                                                $set('experience_start_date', null);
+                                                $set('experience_end_date', null);
+                                                return;
+                                            }
+
+                                            $admissionDate = $get('admission_date');
+
+                                            if ($admissionDate) {
+                                                $set('experience_start_date', $admissionDate);
+                                            }
+
+                                            self::applyExperienceModel($set, $get, $get('experience_model'));
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
+
+                                    Select::make('experience_model')
+                                        ->label('Modelo da Experiência')
+                                        ->options([
+                                            '30' => '30 dias',
+                                            '30_30' => '30 + 30',
+                                            '30_60' => '30 + 60',
+                                            '45_45' => '45 + 45',
+                                            '60_30' => '60 + 30',
+                                            'manual' => 'Manual',
+                                        ])
+                                        ->native(false)
+                                        ->live()
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                            self::applyExperienceModel($set, $get, $state);
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ]),
+
+                                    TextInput::make('experience_days_first')
+                                        ->label('1ª Etapa (dias)')
+                                        ->numeric()
+                                        ->live()
+                                        ->dehydrated(true)
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->disabled(fn (Get $get) => $get('experience_model') !== 'manual')
+                                        ->afterStateUpdated(function (Set $set, Get $get): void {
+                                            self::recalculateExperienceDates($set, $get);
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
+
+                                    TextInput::make('experience_days_second')
+                                        ->label('2ª Etapa (dias)')
+                                        ->numeric()
+                                        ->live()
+                                        ->dehydrated(true)
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->disabled(fn (Get $get) => $get('experience_model') !== 'manual')
+                                        ->afterStateUpdated(function (Set $set, Get $get): void {
+                                            self::recalculateExperienceDates($set, $get);
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
+
+                                    TextInput::make('experience_total_days')
+                                        ->label('Total (dias)')
+                                        ->numeric()
+                                        ->disabled()
+                                        ->dehydrated(true)
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 1,
+                                            'xl' => 2,
+                                        ]),
+
+                                    DatePicker::make('experience_start_date')
+                                        ->label('Início da Experiência')
+                                        ->native(false)
+                                        ->live()
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->afterStateUpdated(function (Set $set, Get $get): void {
+                                            self::recalculateExperienceDates($set, $get);
+                                        })
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
+
+                                    DatePicker::make('experience_end_date')
+                                        ->label('Fim da Experiência')
+                                        ->native(false)
+                                        ->disabled()
+                                        ->dehydrated(true)
+                                        ->visible(fn (Get $get) =>
+                                            self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
+                                            && (bool) $get('has_experience_period')
+                                        )
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 2,
+                                        ]),
                                 ]),
                         ]),
 
@@ -994,4 +1159,90 @@ class EmployeeForm
 
         return number_format((float) $state, 2, ',', '.');
     }
+
+    protected static function isCltContract(?int $contractTypeId): bool
+    {
+        if (! $contractTypeId) {
+            return false;
+        }
+
+        $contractType = ContractType::find($contractTypeId);
+
+        if (! $contractType) {
+            return false;
+        }
+
+        $name = mb_strtolower(trim((string) $contractType->name));
+
+        return str_contains($name, 'clt');
+    }
+
+        protected static function applyExperienceModel(Set $set, Get $get, ?string $model): void
+    {
+        if (! $model) {
+            $set('experience_days_first', null);
+            $set('experience_days_second', null);
+            $set('experience_total_days', null);
+            $set('experience_end_date', null);
+            return;
+        }
+
+        if ($model === '30') {
+            $set('experience_days_first', 30);
+            $set('experience_days_second', 0);
+        }
+
+        if ($model === '30_30') {
+            $set('experience_days_first', 30);
+            $set('experience_days_second', 30);
+        }
+        if ($model === '30_60') {
+            $set('experience_days_first', 30);
+            $set('experience_days_second', 60);
+        }
+
+        if ($model === '45_45') {
+            $set('experience_days_first', 45);
+            $set('experience_days_second', 45);
+        }
+
+        if ($model === '60_30') {
+            $set('experience_days_first', 60);
+            $set('experience_days_second', 30);
+        }
+
+        if ($model === 'manual') {
+            $set('experience_days_first', $get('experience_days_first') ?: null);
+            $set('experience_days_second', $get('experience_days_second') ?: null);
+        }
+
+        self::recalculateExperienceDates($set, $get);
+    }
+
+    protected static function recalculateExperienceDates(Set $set, Get $get): void
+{
+    $first = (int) ($get('experience_days_first') ?: 0);
+    $second = (int) ($get('experience_days_second') ?: 0);
+
+    $total = $first + $second;
+
+    if ($total > 90) {
+        $total = 90;
+    }
+
+    $set('experience_total_days', $total);
+
+    $startDate = $get('experience_start_date') ?: $get('admission_date');
+
+    if (! $startDate || $total <= 0) {
+        $set('experience_end_date', null);
+        return;
+    }
+
+    $endDate = Carbon::parse($startDate)
+        ->addDays($total - 1)
+        ->format('Y-m-d');
+
+    $set('experience_end_date', $endDate);
+}
 }

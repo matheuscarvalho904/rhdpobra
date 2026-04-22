@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\Companies\Schemas;
 
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\RawJs;
 
 class CompanyForm
 {
@@ -14,7 +16,6 @@ class CompanyForm
         return $schema
             ->components([
                 Section::make('Dados da Empresa')
-                    
                     ->schema([
                         TextInput::make('code')
                             ->label('Código')
@@ -40,6 +41,7 @@ class CompanyForm
                             ->maxLength(18)
                             ->unique(ignoreRecord: true)
                             ->required()
+                            ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state))
                             ->columnSpan(2),
 
                         Toggle::make('is_active')
@@ -47,36 +49,49 @@ class CompanyForm
                             ->default(true)
                             ->columnSpan(1),
                     ]),
-                    Section::make('Dados do Representante')
-                    
+
+                Section::make('Dados do Representante')
                     ->schema([
                         TextInput::make('legal_representative_name')
-                        ->label('Representante Legal')
-                        ->maxLength(255),
+                            ->label('Representante Legal')
+                            ->maxLength(255)
+                            ->columnSpan(2),
 
-                    TextInput::make('legal_representative_cpf')
-                        ->label('CPF do Representante')
-                        ->maxLength(14)
-                        ->mask(\Filament\Support\RawJs::make("'999.999.999-99'"))
-                        ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state)),
+                        TextInput::make('legal_representative_cpf')
+                            ->label('CPF do Representante')
+                            ->maxLength(14)
+                            ->mask(RawJs::make("'999.999.999-99'"))
+                            ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state))
+                            ->columnSpan(1),
 
-                    TextInput::make('legal_representative_rg')
-                        ->label('RG do Representante')
-                        ->maxLength(30),
+                        TextInput::make('legal_representative_rg')
+                            ->label('RG do Representante')
+                            ->maxLength(30)
+                            ->columnSpan(1),
 
-                    TextInput::make('legal_representative_role')
-                        ->label('Cargo do Representante')
-                        ->maxLength(100),
-
+                        Select::make('legal_representative_role')
+                            ->label('Cargo do Representante')
+                            ->options([
+                                'socio_administrador' => 'Sócio Administrador',
+                                'diretor' => 'Diretor',
+                                'empresario' => 'Empresário',
+                                'proprietario' => 'Proprietário',
+                                'administrador' => 'Administrador',
+                                'gerente' => 'Gerente',
+                                'representante_legal' => 'Representante Legal',
+                            ])
+                            ->searchable()
+                            ->native(false)
+                            ->columnSpan(2),
                     ]),
-                    
+
                 Section::make('Endereço e Contato')
-                    
                     ->schema([
                         TextInput::make('zip_code')
                             ->label('CEP')
                             ->mask('99999-999')
                             ->maxLength(9)
+                            ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state))
                             ->columnSpan(2),
 
                         TextInput::make('address')
@@ -113,6 +128,7 @@ class CompanyForm
                             ->label('Telefone')
                             ->mask('(99) 99999-9999')
                             ->maxLength(20)
+                            ->dehydrateStateUsing(fn ($state) => preg_replace('/\D+/', '', (string) $state))
                             ->columnSpan(2),
 
                         TextInput::make('email')

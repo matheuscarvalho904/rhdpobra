@@ -266,7 +266,7 @@
             <div class="signature-col">
                 <div class="signature-line">
                     {{ mb_strtoupper($company->legal_representative_name ?? 'REPRESENTANTE LEGAL') }}<br>
-                    {{ mb_strtoupper($company->legal_representative_role ?? 'CONTRATANTE') }}
+                {{ mb_strtoupper($company->legal_representative_role ?? 'CONTRATANTE') }}
                 </div>
             </div>
 

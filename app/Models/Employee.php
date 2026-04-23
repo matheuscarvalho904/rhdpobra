@@ -517,4 +517,9 @@ class Employee extends Model
     return $this->hasMany(EmployeeFile::class);
 }
 
+public function epiDeliveries(): HasMany
+{
+    return $this->hasMany(\App\Models\EmployeeEpiDelivery::class);
+}
+
 }

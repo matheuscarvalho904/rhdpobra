@@ -12,6 +12,7 @@ use App\Models\JobRole;
 use App\Models\Work;
 use App\Models\WorkShift;
 use App\Services\EmployeeContractDocumentService;
+use App\Services\EmployeeEpiReportService;
 use App\Services\EmployeeRehireService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -289,7 +290,7 @@ class EmployeesTable
             ])
             ->filtersFormColumns(3)
             ->striped()
-            ->paginated([10, 25, 50, 100])
+            ->paginated([5, 10, 25, 50, 100])
             ->recordActions([
                 ViewAction::make()
                     ->label('Visualizar'),
@@ -330,6 +331,35 @@ class EmployeesTable
                         } catch (\Throwable $e) {
                             Notification::make()
                                 ->title('Erro ao gerar contrato.')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return null;
+                        }
+                    }),
+
+                Action::make('employee_epi_report')
+                    ->label('Relatório EPI')
+                    ->icon('heroicon-o-shield-check')
+                    ->color('primary')
+                    ->action(function ($record) {
+                        try {
+                            $service = app(EmployeeEpiReportService::class);
+                            $pdfContent = $service->generate($record)->output();
+
+                            Notification::make()
+                                ->title('Relatório de EPI gerado com sucesso.')
+                                ->success()
+                                ->send();
+
+                            return response()->streamDownload(
+                                fn () => print($pdfContent),
+                                'relatorio-epi-colaborador-' . $record->id . '.pdf'
+                            );
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Erro ao gerar relatório de EPI.')
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();

@@ -9,6 +9,7 @@ class AdminUserSeeder extends Seeder
 {
     public function run(): void
     {
+        //corrige
         $user = User::updateOrCreate(
             ['email' => 'admin@obrapeople.com.br'],
             [

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\ContractProcessingRuleService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -127,6 +128,11 @@ class Employee extends Model
         'inss_optional',
         'with_inss',
 
+        /*
+        |--------------------------------------------------------------------------
+        | CONTRATO DE EXPERIÊNCIA - CLT
+        |--------------------------------------------------------------------------
+        */
         'has_experience_period',
         'experience_model',
         'experience_days_first',
@@ -134,6 +140,15 @@ class Employee extends Model
         'experience_total_days',
         'experience_start_date',
         'experience_end_date',
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONTRATO DE PRESTAÇÃO DE SERVIÇO - PF / PJ
+        |--------------------------------------------------------------------------
+        */
+        'service_contract_term',
+        'service_contract_start_date',
+        'service_contract_end_date',
 
         /*
         |--------------------------------------------------------------------------
@@ -154,6 +169,10 @@ class Employee extends Model
         'birth_date' => 'date',
         'admission_date' => 'date',
         'termination_date' => 'date',
+        'experience_start_date' => 'date',
+        'experience_end_date' => 'date',
+        'service_contract_start_date' => 'date',
+        'service_contract_end_date' => 'date',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -166,6 +185,9 @@ class Employee extends Model
         'salary' => 'decimal:2',
         'salary_advance_amount' => 'decimal:2',
         'fgts_rate' => 'decimal:2',
+        'experience_days_first' => 'integer',
+        'experience_days_second' => 'integer',
+        'experience_total_days' => 'integer',
 
         /*
         |--------------------------------------------------------------------------
@@ -181,13 +203,7 @@ class Employee extends Model
         'has_irrf' => 'boolean',
         'inss_optional' => 'boolean',
         'with_inss' => 'boolean',
-
         'has_experience_period' => 'boolean',
-        'experience_days_first' => 'integer',
-        'experience_days_second' => 'integer',
-        'experience_total_days' => 'integer',
-        'experience_start_date' => 'date',
-        'experience_end_date' => 'date',
     ];
 
     protected $attributes = [
@@ -324,6 +340,22 @@ class Employee extends Model
         return $this->processing_type === 'accounts_payable';
     }
 
+    public function isServiceContract(): bool
+    {
+        $contractTypeName = mb_strtolower((string) ($this->contractType?->name ?? ''));
+
+        return $this->processing_type === 'accounts_payable'
+            || str_contains($contractTypeName, 'pf')
+            || str_contains($contractTypeName, 'pj')
+            || str_contains($contractTypeName, 'pessoa física')
+            || str_contains($contractTypeName, 'pessoa fisica')
+            || str_contains($contractTypeName, 'pessoa jurídica')
+            || str_contains($contractTypeName, 'pessoa juridica')
+            || str_contains($contractTypeName, 'prestador')
+            || str_contains($contractTypeName, 'prestação')
+            || str_contains($contractTypeName, 'prestacao');
+    }
+
     public function usesInss(): bool
     {
         return (bool) $this->has_inss && (bool) $this->with_inss;
@@ -332,6 +364,16 @@ class Employee extends Model
     public function hasPix(): bool
     {
         return ! empty($this->pix_key);
+    }
+
+    public function isContractIndefinite(): bool
+    {
+        return $this->service_contract_term === 'indefinite';
+    }
+
+    public function contractEndDate(): ?Carbon
+    {
+        return $this->service_contract_end_date;
     }
 
     public function hasPayrollEligibleContract(): bool
@@ -513,13 +555,23 @@ class Employee extends Model
     }
 
     public function files(): HasMany
-{
-    return $this->hasMany(EmployeeFile::class);
-}
+    {
+        return $this->hasMany(EmployeeFile::class);
+    }
 
-public function epiDeliveries(): HasMany
-{
-    return $this->hasMany(\App\Models\EmployeeEpiDelivery::class);
-}
+    public function epiDeliveries(): HasMany
+    {
+        return $this->hasMany(\App\Models\EmployeeEpiDelivery::class);
+    }
 
+    public function externalMappings(): HasMany
+    {
+        return $this->hasMany(EmployeeExternalMapping::class);
+    }
+
+    public function solidesMapping(): HasOne
+    {
+        return $this->hasOne(EmployeeExternalMapping::class)
+            ->where('provider', 'solides');
+    }
 }

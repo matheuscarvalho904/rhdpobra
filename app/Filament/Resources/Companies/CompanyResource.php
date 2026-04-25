@@ -16,6 +16,8 @@ use UnitEnum;
 
 class CompanyResource extends Resource
 {
+    protected static string $permissionPrefix = 'companies';
+    
     protected static ?string $model = Company::class;
 
     protected static ?string $navigationLabel = 'Empresas';

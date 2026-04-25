@@ -89,187 +89,165 @@
     </style>
 </head>
 <body>
-    @php
-        \Carbon\Carbon::setLocale('pt_BR');
 
-        $formatCnpj = function (?string $value): string {
-            $digits = preg_replace('/\D+/', '', (string) $value);
+@php
+    \Carbon\Carbon::setLocale('pt_BR');
 
-            if (strlen($digits) !== 14) {
-                return $value ?: '-';
-            }
+    $formatCnpj = function (?string $value): string {
+        $digits = preg_replace('/\D+/', '', (string) $value);
 
-            return preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $digits);
-        };
+        if (strlen($digits) !== 14) {
+            return $value ?: '-';
+        }
 
-        $companyAddress = trim(collect([
-            $company->address ?? null,
-            $company->number ?? null,
-            $company->complement ?? null,
-            $company->district ?? null,
-            $company->city ?? null,
-            $company->state ?? null,
-        ])->filter()->implode(', '));
+        return preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $digits);
+    };
 
-        $startDate = $employee->admission_date
-            ? \Carbon\Carbon::parse($employee->admission_date)
-            : now();
+    // 🔥 CORREÇÃO IMPORTANTE
+    $formatCpf = function (?string $value): string {
+        $digits = preg_replace('/\D+/', '', (string) $value);
 
-        $value = number_format((float) ($employee->salary ?? 0), 2, ',', '.');
-        $city = $company->city ?? $branch->city ?? $employee->city ?? 'Aripuanã';
-    @endphp
+        if (strlen($digits) !== 11) {
+            return $value ?: '-';
+        }
 
-    <div class="page">
-        <div class="title">Contrato de Prestação de Serviços – Pessoa Jurídica</div>
+        return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $digits);
+    };
 
-        <div class="paragraph">
-            Pelo presente instrumento e na melhor forma de direito, as partes:
-        </div>
+    $companyAddress = trim(collect([
+        $company->address ?? null,
+        $company->number ?? null,
+        $company->complement ?? null,
+        $company->district ?? null,
+        $company->city ?? null,
+        $company->state ?? null,
+    ])->filter()->implode(', '));
 
-        <div class="paragraph">
-            <strong>1. CONTRATANTE:</strong>
-            <strong>{{ mb_strtoupper($company->name ?? '-') }}</strong>,
-            com sede em {{ $companyAddress ?: 'endereço não informado' }},
-            inscrita no CNPJ sob nº <strong>{{ $formatCnpj($company->cnpj ?? null) }}</strong>,
-            representada neste ato por seu responsável legal 
-            <strong>{{ mb_strtoupper($company->legal_representative_name ?? 'REPRESENTANTE LEGAL') }}</strong>,
+    $startDate = $employee->admission_date
+        ? \Carbon\Carbon::parse($employee->admission_date)
+        : now();
 
-            @if($company->legal_representative_role)
-                {{ mb_strtoupper($company->legal_representative_role) }},
-            @endif
+    // 🔥 NOVA LÓGICA DE PRAZO
+    $contractStartDate = $employee->service_contract_start_date
+        ? \Carbon\Carbon::parse($employee->service_contract_start_date)
+        : $startDate;
 
-            @if($company->legal_representative_cpf)
-                portador do CPF nº <strong>{{ $formatCpf($company->legal_representative_cpf) }}</strong>,
-                    @endif
+    $contractEndDate = $employee->service_contract_end_date
+        ? \Carbon\Carbon::parse($employee->service_contract_end_date)
+        : null;
+
+    $contractTermLabel = match ($employee->service_contract_term) {
+        '30_days' => '30 dias',
+        '60_days' => '60 dias',
+        '90_days' => '90 dias',
+        '180_days' => '180 dias',
+        '12_months' => '12 meses',
+        'indefinite' => 'prazo indeterminado',
+        default => 'prazo indeterminado',
+    };
+
+    $value = number_format((float) ($employee->salary ?? 0), 2, ',', '.');
+    $city = $company->city ?? $branch->city ?? $employee->city ?? 'Aripuanã';
+@endphp
+
+<div class="page">
+    <div class="title">Contrato de Prestação de Serviços – Pessoa Jurídica</div>
+
+    <div class="paragraph">
+        Pelo presente instrumento e na melhor forma de direito, as partes:
+    </div>
+
+    <div class="paragraph">
+        <strong>1. CONTRATANTE:</strong>
+        <strong>{{ mb_strtoupper($company->name ?? '-') }}</strong>,
+        com sede em {{ $companyAddress ?: 'endereço não informado' }},
+        inscrita no CNPJ sob nº <strong>{{ $formatCnpj($company->cnpj ?? null) }}</strong>,
+        representada neste ato por seu responsável legal 
+        <strong>{{ mb_strtoupper($company->legal_representative_name ?? 'REPRESENTANTE LEGAL') }}</strong>,
+
+        @if($company->legal_representative_role)
+            {{ mb_strtoupper($company->legal_representative_role) }},
+        @endif
+
+        @if($company->legal_representative_cpf)
+            portador do CPF nº <strong>{{ $formatCpf($company->legal_representative_cpf) }}</strong>,
+        @endif
 
         @if($company->legal_representative_rg)
             e RG nº <strong>{{ $company->legal_representative_rg }}</strong>.
         @endif
+    </div>
+
+    <div class="paragraph">
+        <strong>2. CONTRATADA:</strong>
+        <strong>{{ mb_strtoupper($employee->name ?? '-') }}</strong>,
+        doravante denominada CONTRATADA.
+    </div>
+
+    <div class="clause">
+        <strong>CLÁUSULA I</strong><br><br>
+        A CONTRATADA prestará serviços à CONTRATANTE na área de
+        <strong>{{ mb_strtoupper($jobRole?->name ?? 'SERVIÇOS ESPECIALIZADOS') }}</strong>.
+    </div>
+
+    <div class="clause">
+        <strong>CLÁUSULA II</strong><br><br>
+        Valor de <strong>R$ {{ $value }}</strong>.
+    </div>
+
+    <div class="clause">
+        <strong>CLÁUSULA III</strong><br><br>
+        Não existe vínculo empregatício.
+    </div>
+
+    <!-- 🔥 CLÁUSULA CORRIGIDA -->
+    <div class="clause">
+        <strong>CLÁUSULA IX</strong><br><br>
+
+        O presente contrato inicia-se em <strong>{{ $contractStartDate->format('d/m/Y') }}</strong>,
+
+        @if(($employee->service_contract_term ?? null) === 'indefinite' || ! $contractEndDate)
+
+            vigorando por <strong>prazo indeterminado</strong>, podendo ser rescindido por qualquer das partes
+            mediante comunicação prévia.
+
+        @else
+
+            vigorando pelo prazo de <strong>{{ $contractTermLabel }}</strong>,
+            com término previsto para <strong>{{ $contractEndDate->format('d/m/Y') }}</strong>.
+
+            <br><br>
+
+            podendo ser prorrogado mediante acordo entre as partes.
+
+        @endif
+    </div>
+
+    <div class="clause">
+        <strong>CLÁUSULA X</strong><br><br>
+        Responsabilidade tributária da contratada.
+    </div>
+
+    <div class="clause">
+        <strong>CLÁUSULA XI</strong><br><br>
+        Foro da comarca da empresa.
+    </div>
+
+    <div class="city-date">
+        {{ mb_strtoupper($city) }}, {{ $contractStartDate->format('d/m/Y') }}.
+    </div>
+
+    <div class="signatures">
+        <div class="signature-col">
+            <div class="signature-line">CONTRATANTE</div>
         </div>
 
-        <div class="paragraph">
-            <strong>2. CONTRATADA:</strong>
-            <strong>{{ mb_strtoupper($employee->name ?? '-') }}</strong>,
-            doravante denominada CONTRATADA.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA I</strong><br><br>
-            A CONTRATADA prestará serviços à CONTRATANTE na área de
-            <strong>{{ mb_strtoupper($jobRole?->name ?? 'SERVIÇOS ESPECIALIZADOS') }}</strong>,
-            podendo atuar em <strong>{{ $work?->name ?? 'local a definir' }}</strong>
-            ou em outros locais vinculados à execução do objeto contratual.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA II</strong><br><br>
-            Pela execução dos serviços, a CONTRATANTE pagará à CONTRATADA a importância de
-            <strong>R$ {{ $value }}</strong>,
-            mediante emissão do documento fiscal cabível, até o quinto dia útil após sua apresentação,
-            conforme processo interno de conferência e liberação.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA III</strong><br><br>
-            A CONTRATADA executará os serviços com autonomia técnica, administrativa e organizacional,
-            não existindo vínculo empregatício entre a CONTRATANTE e a CONTRATADA,
-            tampouco entre a CONTRATANTE e os profissionais eventualmente alocados pela CONTRATADA.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA IV</strong><br><br>
-            Constituem obrigações da CONTRATADA:
-            executar os serviços com qualidade e diligência;
-            manter regularidade fiscal, trabalhista e previdenciária;
-            responder por seus profissionais, encargos e obrigações legais;
-            e cumprir as normas técnicas e operacionais aplicáveis à atividade desenvolvida.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA V</strong><br><br>
-            Os serviços poderão ser executados em qualquer local indicado pela CONTRATANTE,
-            inclusive obras, unidades operacionais, canteiros, escritórios ou frentes de trabalho,
-            conforme a necessidade do projeto ou contrato principal.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA VI</strong><br><br>
-            A CONTRATADA compromete-se a cumprir e fazer cumprir todas as normas de segurança do trabalho,
-            responsabilizando-se integralmente por seus colaboradores, prepostos e terceiros vinculados à execução dos serviços,
-            inclusive quanto ao uso correto de Equipamentos de Proteção Individual (EPI), quando exigidos.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA VII</strong><br><br>
-            A CONTRATADA responderá integralmente pelos danos materiais, operacionais, técnicos ou financeiros
-            que causar à CONTRATANTE ou a terceiros, quando decorrentes de ação, omissão, culpa ou dolo
-            no exercício das atividades contratadas.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA VIII</strong><br><br>
-            A CONTRATADA compromete-se a manter absoluto sigilo sobre quaisquer informações, documentos,
-            processos, estratégias, dados técnicos, comerciais, financeiros ou operacionais da CONTRATANTE,
-            não podendo reproduzi-los, divulgá-los ou utilizá-los para finalidade diversa da execução contratual.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA IX</strong><br><br>
-            O presente contrato inicia-se em <strong>{{ $startDate->format('d/m/Y') }}</strong>,
-            vigorando por prazo indeterminado, podendo ser rescindido por qualquer das partes
-            mediante comunicação prévia, observadas as obrigações pendentes até a data do encerramento.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA X</strong><br><br>
-            A CONTRATADA será exclusiva responsável pelos tributos, encargos fiscais, previdenciários,
-            trabalhistas e comerciais inerentes à sua atividade e aos profissionais que utilizar na execução dos serviços,
-            inexistindo solidariedade automática da CONTRATANTE, salvo nas hipóteses expressamente previstas em lei.
-        </div>
-
-        <div class="clause">
-            <strong>CLÁUSULA XI</strong><br><br>
-            Para dirimir quaisquer controvérsias oriundas deste contrato,
-            fica eleito o foro da comarca da sede da CONTRATANTE,
-            com renúncia expressa de qualquer outro, por mais privilegiado que seja.
-        </div>
-
-        <div class="footer-text">
-            E por estarem justas e contratadas, as partes firmam o presente instrumento em duas vias de igual teor e forma.
-        </div>
-
-        <div class="city-date">
-            {{ mb_strtoupper($city) }}, {{ $startDate->locale('pt_BR')->translatedFormat('d \\d\\e F \\d\\e Y') }}.
-        </div>
-
-        <div class="signatures">
-            <div class="signature-col">
-                <div class="signature-line">
-                    CONTRATANTE
-                </div>
-            </div>
-
-            <div class="signature-col">
-                <div class="signature-line">
-                    {{ mb_strtoupper($employee->name ?? 'CONTRATADA') }}
-                </div>
-            </div>
-        </div>
-
-        <div class="witnesses">
-            <div class="witness-col">
-                <div class="witness-line">
-                    1ª TESTEMUNHA
-                </div>
-            </div>
-
-            <div class="witness-col">
-                <div class="witness-line">
-                    2ª TESTEMUNHA
-                </div>
-            </div>
+        <div class="signature-col">
+            <div class="signature-line">{{ mb_strtoupper($employee->name ?? 'CONTRATADA') }}</div>
         </div>
     </div>
+
+</div>
 
 </body>
 </html>

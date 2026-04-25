@@ -4,11 +4,22 @@ namespace App\Models;
 
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Permission\Traits\HasRoles;
+/**
+ * @method bool can(string $ability, mixed $arguments = [])
+ * @method bool hasRole(string|array $roles)
+ * @method bool hasAnyRole(string|array $roles)
+ */
 
+
+/**
+ * @method bool hasRole(string|array $roles, ?string $guard = null)
+ * @method bool hasAnyRole(string|array $roles, ?string $guard = null)
+ * @method bool hasAllRoles(string|array $roles, ?string $guard = null)
+ */
 class User extends Authenticatable implements FilamentUser
 {
     use Notifiable;
@@ -37,11 +48,37 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->is_active;
+        if (! $this->is_active) {
+            return false;
+        }
+
+        return $this->hasAnyRole([
+            'Administrador',
+            'RH',
+            'Encarregado',
+            'Financeiro',
+            'Operador',
+            'Consulta',
+        ]);
     }
 
     public function accessScopes(): HasMany
     {
         return $this->hasMany(UserAccessScope::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->hasRole('Administrador');
+    }
+
+    public function isRh(): bool
+    {
+        return $this->hasRole('RH');
+    }
+
+    public function isConsulta(): bool
+    {
+        return $this->hasRole('Consulta');
     }
 }

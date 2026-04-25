@@ -16,6 +16,8 @@ use UnitEnum;
 
 class WorkResource extends Resource
 {
+    protected static string $permissionPrefix = 'works';
+
     protected static ?string $model = Work::class;
 
     protected static ?string $navigationLabel = 'Obras';

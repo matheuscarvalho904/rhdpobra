@@ -22,7 +22,7 @@ class EmployeeResource extends Resource
 
     protected static ?string $model = Employee::class;
 
-    protected static string $permissionPrefix = 'employees';
+   // protected static string $permissionPrefix = 'employees';
 
     protected static ?string $navigationLabel = 'Colaboradores';
     protected static ?string $modelLabel = 'Colaborador';

@@ -18,11 +18,11 @@ use UnitEnum;
 
 class EmployeeResource extends Resource
 {
-    //use CanAuthorizeResource;
+    use CanAuthorizeResource;
 
     protected static ?string $model = Employee::class;
 
-   // protected static string $permissionPrefix = 'employees';
+    protected static string $permissionPrefix = 'employees';
 
     protected static ?string $navigationLabel = 'Colaboradores';
     protected static ?string $modelLabel = 'Colaborador';

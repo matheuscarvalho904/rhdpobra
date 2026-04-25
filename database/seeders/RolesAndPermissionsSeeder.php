@@ -39,7 +39,6 @@ class RolesAndPermissionsSeeder extends Seeder
             'works.delete',
 
             // EMPLOYEES
-            'employees.view_any',
             'employees.view',
             'employees.create',
             'employees.update',
@@ -115,7 +114,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // RH
         $rh->syncPermissions([
-            'employees.view_any',
             'employees.view',
             'employees.create',
             'employees.update',
@@ -135,7 +133,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // DP
         $dp->syncPermissions([
-            'employees.view_any',
             'employees.view',
 
             'payroll.view',
@@ -167,7 +164,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // ENCARREGADO
         $encarregado->syncPermissions([
-            'employees.view_any',
             'employees.view',
             'epis.view',
             'epis.deliver',
@@ -175,7 +171,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // OPERADOR
         $operador->syncPermissions([
-            'employees.view_any',
             'employees.view',
             'employees.create',
             'employees.update',
@@ -186,7 +181,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         // CONSULTA
         $consulta->syncPermissions([
-            'employees.view_any',
             'employees.view',
             'epis.view',
             'payroll.view',

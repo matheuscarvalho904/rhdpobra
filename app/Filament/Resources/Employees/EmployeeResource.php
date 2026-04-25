@@ -18,7 +18,7 @@ use UnitEnum;
 
 class EmployeeResource extends Resource
 {
-    //use CanAuthorizeResource;
+    use CanAuthorizeResource;
 
     protected static ?string $model = Employee::class;
 

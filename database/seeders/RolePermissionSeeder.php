@@ -17,6 +17,10 @@ class RolePermissionSeeder extends Seeder
 
         $rh = Role::findByName('RH', 'web');
         $rh->syncPermissions([
+            'employees.view_any',
+            'employees.view',
+            'employees.create',
+            'employees.update',
             'companies.view_any',
             'companies.view',
             'branches.view_any',
@@ -57,6 +61,10 @@ class RolePermissionSeeder extends Seeder
 
         $dp = Role::findByName('DP', 'web');
         $dp->syncPermissions([
+            'employees.view_any',
+            'employees.view',
+            'employees.create',
+            'employees.update',
             'companies.view_any',
             'companies.view',
             'branches.view_any',
@@ -105,6 +113,7 @@ class RolePermissionSeeder extends Seeder
 
         $encarregado = Role::findByName('Encarregado', 'web');
         $encarregado->syncPermissions([
+
             'works.view_any',
             'works.view',
             'departments.view_any',
@@ -139,6 +148,10 @@ class RolePermissionSeeder extends Seeder
 
         $consulta = Role::findByName('Consulta', 'web');
         $consulta->syncPermissions([
+            'employees.view_any',
+            'employees.view',
+            'employees.create',
+            'employees.update',
             'companies.view_any',
             'companies.view',
             'branches.view_any',

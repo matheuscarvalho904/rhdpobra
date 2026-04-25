@@ -2,11 +2,9 @@
 
 namespace App\Filament\Resources\Employees;
 
-use App\Filament\Resources\Concerns\CanAuthorizeResource;
 use App\Filament\Resources\Employees\Pages\CreateEmployee;
 use App\Filament\Resources\Employees\Pages\EditEmployee;
 use App\Filament\Resources\Employees\Pages\ListEmployees;
-use App\Filament\Resources\Employees\RelationManagers\FilesRelationManager;
 use App\Filament\Resources\Employees\Schemas\EmployeeForm;
 use App\Filament\Resources\Employees\Tables\EmployeesTable;
 use App\Models\Employee;
@@ -18,30 +16,29 @@ use UnitEnum;
 
 class EmployeeResource extends Resource
 {
-    use CanAuthorizeResource;
-
     protected static ?string $model = Employee::class;
-
-    protected static string $permissionPrefix = 'employees';
 
     protected static ?string $navigationLabel = 'Colaboradores';
     protected static ?string $modelLabel = 'Colaborador';
     protected static ?string $pluralModelLabel = 'Colaboradores';
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-identification';
+    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-identification'; 
     protected static string|UnitEnum|null $navigationGroup = 'RH';
     protected static ?int $navigationSort = 1;
 
+    // 🔥 FORM
     public static function form(Schema $schema): Schema
     {
         return EmployeeForm::configure($schema);
     }
 
+    // 🔥 TABLE
     public static function table(Table $table): Table
     {
         return EmployeesTable::configure($table);
     }
 
+    // 🔎 BUSCA GLOBAL (ESSENCIAL PRA ERP)
     public static function getGloballySearchableAttributes(): array
     {
         return [
@@ -68,13 +65,7 @@ class EmployeeResource extends Resource
         ]);
     }
 
-    public static function getRelations(): array
-    {
-        return [
-            FilesRelationManager::class,
-        ];
-    }
-
+    // 📄 PÁGINAS
     public static function getPages(): array
     {
         return [
@@ -83,4 +74,10 @@ class EmployeeResource extends Resource
             'edit' => EditEmployee::route('/{record}/edit'),
         ];
     }
+    public static function getRelations(): array
+{
+    return [
+        \App\Filament\Resources\Employees\RelationManagers\FilesRelationManager::class,
+    ];
+}
 }

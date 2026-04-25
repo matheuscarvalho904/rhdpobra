@@ -134,24 +134,6 @@
             ? \Carbon\Carbon::parse($employee->admission_date)
             : now();
 
-        $contractStartDate = $employee->service_contract_start_date
-            ? \Carbon\Carbon::parse($employee->service_contract_start_date)
-            : $startDate;
-
-        $contractEndDate = $employee->service_contract_end_date
-            ? \Carbon\Carbon::parse($employee->service_contract_end_date)
-            : null;
-
-        $contractTermLabel = match ($employee->service_contract_term) {
-            '30_days' => '30 dias',
-            '60_days' => '60 dias',
-            '90_days' => '90 dias',
-            '180_days' => '180 dias',
-            '12_months' => '12 meses',
-            'indefinite' => 'prazo indeterminado',
-            default => 'prazo indeterminado',
-        };
-
         $salary = number_format((float) ($employee->salary ?? 0), 2, ',', '.');
         $city = $company->city ?? $branch->city ?? $employee->city ?? 'Aripuanã';
     @endphp
@@ -259,25 +241,10 @@
 
         <div class="clause">
             <strong>CLÁUSULA X</strong><br><br>
-
-            O presente contrato inicia-se em <strong>{{ $contractStartDate->format('d/m/Y') }}</strong>,
-
-            @if(($employee->service_contract_term ?? null) === 'indefinite' || ! $contractEndDate)
-                vigorando por <strong>prazo indeterminado</strong>, podendo ser rescindido por qualquer das partes,
-                mediante comunicação prévia e sem caracterização de vínculo trabalhista,
-                observadas as obrigações eventualmente pendentes até a data do encerramento.
-            @else
-                vigorando pelo prazo de <strong>{{ $contractTermLabel }}</strong>,
-                com término previsto para <strong>{{ $contractEndDate->format('d/m/Y') }}</strong>,
-                podendo ser prorrogado mediante acordo entre as partes, por termo aditivo,
-                renovação contratual ou continuidade expressamente aceita da prestação dos serviços.
-
-                <br><br>
-
-                Ao término do prazo, inexistindo manifestação contrária das partes,
-                poderá haver nova pactuação contratual, preservada a natureza civil da contratação,
-                sem caracterização de vínculo empregatício.
-            @endif
+            O presente contrato inicia-se em <strong>{{ $startDate->format('d/m/Y') }}</strong>,
+            vigorando por prazo indeterminado, podendo ser rescindido por qualquer das partes,
+            mediante comunicação prévia e sem caracterização de vínculo trabalhista,
+            observadas as obrigações eventualmente pendentes até a data do encerramento.
         </div>
 
         <div class="clause">
@@ -292,14 +259,14 @@
         </div>
 
         <div class="city-date">
-            {{ mb_strtoupper($city) }}, {{ $contractStartDate->locale('pt_BR')->translatedFormat('d \\d\\e F \\d\\e Y') }}.
+            {{ mb_strtoupper($city) }}, {{ $startDate->locale('pt_BR')->translatedFormat('d \\d\\e F \\d\\e Y') }}.
         </div>
 
         <div class="signatures">
             <div class="signature-col">
                 <div class="signature-line">
                     {{ mb_strtoupper($company->legal_representative_name ?? 'REPRESENTANTE LEGAL') }}<br>
-                    {{ mb_strtoupper($company->legal_representative_role ?? 'CONTRATANTE') }}
+                {{ mb_strtoupper($company->legal_representative_role ?? 'CONTRATANTE') }}
                 </div>
             </div>
 

@@ -8,7 +8,6 @@ use App\Filament\Resources\EmployeeEpiDeliveries\Pages\ListEmployeeEpiDeliveries
 use App\Models\Employee;
 use App\Models\EmployeeEpiDelivery;
 use App\Models\Epi;
-use App\Models\User;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
@@ -19,12 +18,10 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Auth;
 use UnitEnum;
 
 class EmployeeEpiDeliveryResource extends Resource
 {
-    protected static string $permissionPrefix = 'epis';
     protected static ?string $model = EmployeeEpiDelivery::class;
 
     protected static ?string $navigationLabel = 'Entregas de EPI';
@@ -35,38 +32,15 @@ class EmployeeEpiDeliveryResource extends Resource
     protected static string|UnitEnum|null $navigationGroup = 'Segurança do Trabalho';
     protected static ?int $navigationSort = 2;
 
-    protected static function user(): ?User
-    {
-        $user = Auth::user();
-        return $user instanceof User ? $user : null;
-    }
-
-    public static function canViewAny(): bool
-    {
-        return static::user()?->can('epis.view') ?? false;
-    }
-
-    public static function canCreate(): bool
-    {
-        return static::user()?->can('epis.deliver') ?? false;
-    }
-
-    public static function canEdit($record): bool
-    {
-        return static::user()?->can('epis.deliver') ?? false;
-    }
-
-    public static function canDelete($record): bool
-    {
-        return static::user()?->can('epis.delete') ?? false;
-    }
-
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
             Select::make('employee_id')
                 ->label('Colaborador')
-                ->options(fn () => Employee::query()->orderBy('name')->pluck('name', 'id')->toArray())
+                ->options(fn () => Employee::query()
+                    ->orderBy('name')
+                    ->pluck('name', 'id')
+                    ->toArray())
                 ->searchable()
                 ->preload()
                 ->required()
@@ -111,28 +85,39 @@ class EmployeeEpiDeliveryResource extends Resource
                         ->native(false),
 
                     TextInput::make('quantity')
+                        ->label('Quantidade')
                         ->numeric()
                         ->default(1)
-                        ->required(),
+                        ->required()
+                        ->minValue(1),
 
-                    DatePicker::make('expected_return_date'),
+                    DatePicker::make('expected_return_date')
+                        ->label('Prev. Devolução'),
 
                     Select::make('status')
+                        ->label('Status do Item')
                         ->options([
                             'delivered' => 'Entregue',
                             'returned' => 'Devolvido',
                             'lost' => 'Perdido',
                             'replaced' => 'Substituído',
                         ])
-                        ->default('delivered'),
+                        ->default('delivered')
+                        ->required()
+                        ->native(false),
 
                     DatePicker::make('returned_at')
+                        ->label('Data de Devolução')
                         ->visible(fn ($get) => $get('status') === 'returned'),
 
-                    Textarea::make('notes')->rows(2),
+                    Textarea::make('notes')
+                        ->label('Observações do Item')
+                        ->rows(2)
+                        ->columnSpanFull(),
                 ])
                 ->columns(2)
-                ->columnSpanFull(),
+                ->columnSpanFull()
+                ->required(),
         ]);
     }
 
@@ -140,11 +125,51 @@ class EmployeeEpiDeliveryResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('employee.name')->label('Colaborador'),
-                TextColumn::make('company.name')->label('Empresa'),
-                TextColumn::make('delivery_date')->date('d/m/Y'),
-                TextColumn::make('items_count')->counts('items'),
-                TextColumn::make('status')->badge(),
+                TextColumn::make('employee.name')
+                    ->label('Colaborador')
+                    ->searchable()
+                    ->sortable(),
+
+                TextColumn::make('company.name')
+                    ->label('Empresa')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(),
+
+                TextColumn::make('delivery_date')
+                    ->label('Entrega')
+                    ->date('d/m/Y')
+                    ->sortable(),
+
+                TextColumn::make('items_count')
+                    ->label('Itens')
+                    ->counts('items')
+                    ->sortable(),
+
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state) => match ($state) {
+                        'open' => 'Aberta',
+                        'closed' => 'Fechada',
+                        default => $state,
+                    })
+                    ->color(fn (?string $state) => match ($state) {
+                        'open' => 'warning',
+                        'closed' => 'success',
+                        default => 'gray',
+                    }),
+
+                TextColumn::make('term_file_name')
+                    ->label('Termo')
+                    ->placeholder('-')
+                    ->toggleable(),
+
+                TextColumn::make('created_at')
+                    ->label('Criado em')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('delivery_date', 'desc');
     }

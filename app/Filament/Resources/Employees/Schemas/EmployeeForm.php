@@ -529,11 +529,6 @@ class EmployeeForm
                                                 $set('experience_start_date', $state);
                                                 self::recalculateExperienceDates($set, $get);
                                             }
-
-                                            if (! $get('service_contract_start_date')) {
-                                                $set('service_contract_start_date', $state);
-                                                self::recalculateServiceContractDates($set, $get);
-                                            }
                                         }),
 
                                     DatePicker::make('termination_date')
@@ -612,11 +607,9 @@ class EmployeeForm
                                             'xl' => 3,
                                         ])
                                         ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
-                                            $contractTypeId = $state ? (int) $state : null;
-                                            $isClt = self::isCltContract($contractTypeId);
-                                            $isService = self::isServiceContract($contractTypeId);
-
-                                            $rules = ContractProcessingRuleService::getByContractTypeId($contractTypeId);
+                                            $rules = ContractProcessingRuleService::getByContractTypeId(
+                                                $state ? (int) $state : null
+                                            );
 
                                             $hasFgts = (bool) ($rules['has_fgts'] ?? false);
                                             $hasInss = (bool) ($rules['has_inss'] ?? true);
@@ -635,7 +628,7 @@ class EmployeeForm
 
                                             $set('has_irrf', (bool) ($rules['has_irrf'] ?? true));
 
-                                            if (! $isClt) {
+                                            if (! self::isCltContract($state ? (int) $state : null)) {
                                                 $set('has_experience_period', false);
                                                 $set('experience_model', null);
                                                 $set('experience_days_first', null);
@@ -649,24 +642,6 @@ class EmployeeForm
                                                 }
 
                                                 self::applyExperienceModel($set, $get, $get('experience_model'));
-                                            }
-
-                                            if ($isClt || ! $isService) {
-                                                $set('service_contract_term', null);
-                                                $set('service_contract_start_date', null);
-                                                $set('service_contract_end_date', null);
-                                            }
-
-                                            if ($isService && ! $get('service_contract_start_date')) {
-                                                $set('service_contract_start_date', $get('admission_date') ?: now()->format('Y-m-d'));
-                                            }
-
-                                            if ($isService && ! $get('service_contract_term')) {
-                                                $set('service_contract_term', '90_days');
-                                            }
-
-                                            if ($isService) {
-                                                self::recalculateServiceContractDates($set, $get);
                                             }
                                         }),
 
@@ -804,60 +779,6 @@ class EmployeeForm
                                         ->visible(fn (Get $get) =>
                                             self::isCltContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
                                             && (bool) $get('has_experience_period')
-                                        )
-                                        ->columnSpan([
-                                            'default' => 1,
-                                            'md' => 2,
-                                            'xl' => 2,
-                                        ]),
-
-                                    Select::make('service_contract_term')
-                                        ->label('Prazo do Contrato')
-                                        ->options([
-                                            '30_days' => '30 dias',
-                                            '60_days' => '60 dias',
-                                            '90_days' => '90 dias',
-                                            '180_days' => '180 dias',
-                                            '12_months' => '12 meses',
-                                            'indefinite' => 'Prazo indeterminado',
-                                        ])
-                                        ->native(false)
-                                        ->live()
-                                        ->default('90_days')
-                                        ->required(fn (Get $get) => self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
-                                        ->visible(fn (Get $get) => self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
-                                        ->afterStateUpdated(function (Set $set, Get $get): void {
-                                            self::recalculateServiceContractDates($set, $get);
-                                        })
-                                        ->columnSpan([
-                                            'default' => 1,
-                                            'md' => 2,
-                                            'xl' => 3,
-                                        ]),
-
-                                    DatePicker::make('service_contract_start_date')
-                                        ->label('Início do Contrato')
-                                        ->native(false)
-                                        ->live()
-                                        ->required(fn (Get $get) => self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
-                                        ->visible(fn (Get $get) => self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
-                                        ->afterStateUpdated(function (Set $set, Get $get): void {
-                                            self::recalculateServiceContractDates($set, $get);
-                                        })
-                                        ->columnSpan([
-                                            'default' => 1,
-                                            'md' => 2,
-                                            'xl' => 2,
-                                        ]),
-
-                                    DatePicker::make('service_contract_end_date')
-                                        ->label('Fim do Contrato')
-                                        ->native(false)
-                                        ->disabled()
-                                        ->dehydrated(true)
-                                        ->visible(fn (Get $get) =>
-                                            self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)
-                                            && $get('service_contract_term') !== 'indefinite'
                                         )
                                         ->columnSpan([
                                             'default' => 1,
@@ -1256,32 +1177,7 @@ class EmployeeForm
         return str_contains($name, 'clt');
     }
 
-    protected static function isServiceContract(?int $contractTypeId): bool
-    {
-        if (! $contractTypeId) {
-            return false;
-        }
-
-        $contractType = ContractType::find($contractTypeId);
-
-        if (! $contractType) {
-            return false;
-        }
-
-        $name = mb_strtolower(trim((string) $contractType->name));
-
-        return str_contains($name, 'pf')
-            || str_contains($name, 'pj')
-            || str_contains($name, 'pessoa física')
-            || str_contains($name, 'pessoa fisica')
-            || str_contains($name, 'pessoa jurídica')
-            || str_contains($name, 'pessoa juridica')
-            || str_contains($name, 'prestador')
-            || str_contains($name, 'prestação')
-            || str_contains($name, 'prestacao');
-    }
-
-    protected static function applyExperienceModel(Set $set, Get $get, ?string $model): void
+        protected static function applyExperienceModel(Set $set, Get $get, ?string $model): void
     {
         if (! $model) {
             $set('experience_days_first', null);
@@ -1300,7 +1196,6 @@ class EmployeeForm
             $set('experience_days_first', 30);
             $set('experience_days_second', 30);
         }
-
         if ($model === '30_60') {
             $set('experience_days_first', 30);
             $set('experience_days_second', 60);
@@ -1325,75 +1220,29 @@ class EmployeeForm
     }
 
     protected static function recalculateExperienceDates(Set $set, Get $get): void
-    {
-        $first = (int) ($get('experience_days_first') ?: 0);
-        $second = (int) ($get('experience_days_second') ?: 0);
+{
+    $first = (int) ($get('experience_days_first') ?: 0);
+    $second = (int) ($get('experience_days_second') ?: 0);
 
-        $total = $first + $second;
+    $total = $first + $second;
 
-        if ($total > 90) {
-            $total = 90;
-        }
-
-        $set('experience_total_days', $total);
-
-        $startDate = $get('experience_start_date') ?: $get('admission_date');
-
-        if (! $startDate || $total <= 0) {
-            $set('experience_end_date', null);
-            return;
-        }
-
-        $endDate = Carbon::parse($startDate)
-            ->addDays($total - 1)
-            ->format('Y-m-d');
-
-        $set('experience_end_date', $endDate);
+    if ($total > 90) {
+        $total = 90;
     }
 
-    protected static function recalculateServiceContractDates(Set $set, Get $get): void
-    {
-        $startDate = $get('service_contract_start_date') ?: $get('admission_date');
-        $term = $get('service_contract_term');
+    $set('experience_total_days', $total);
 
-        if (! $startDate) {
-            $set('service_contract_end_date', null);
-            return;
-        }
+    $startDate = $get('experience_start_date') ?: $get('admission_date');
 
-        if (! $term) {
-            $set('service_contract_end_date', null);
-            return;
-        }
-
-        if ($term === 'indefinite') {
-            $set('service_contract_end_date', null);
-            return;
-        }
-
-        $daysMap = [
-            '30_days' => 30,
-            '60_days' => 60,
-            '90_days' => 90,
-            '180_days' => 180,
-        ];
-
-        if (isset($daysMap[$term])) {
-            $endDate = Carbon::parse($startDate)
-                ->addDays($daysMap[$term] - 1)
-                ->format('Y-m-d');
-
-            $set('service_contract_end_date', $endDate);
-            return;
-        }
-
-        if ($term === '12_months') {
-            $endDate = Carbon::parse($startDate)
-                ->addMonths(12)
-                ->subDay()
-                ->format('Y-m-d');
-
-            $set('service_contract_end_date', $endDate);
-        }
+    if (! $startDate || $total <= 0) {
+        $set('experience_end_date', null);
+        return;
     }
+
+    $endDate = Carbon::parse($startDate)
+        ->addDays($total - 1)
+        ->format('Y-m-d');
+
+    $set('experience_end_date', $endDate);
+}
 }

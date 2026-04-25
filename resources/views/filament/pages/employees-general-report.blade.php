@@ -1,55 +1,54 @@
 <x-filament-panels::page>
     <div class="space-y-6">
-        <form wire:submit.prevent="generate" class="space-y-6">
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             {{ $this->form }}
+        </div>
 
-            <div class="flex flex-wrap gap-3">
-                <x-filament::button type="submit">
-                    Gerar Relatório
-                </x-filament::button>
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-gray-900">Relatório Geral</h2>
 
-                <x-filament::button color="success" type="button" wire:click="exportPdf">
-                    Exportar PDF
-                </x-filament::button>
-            </div>
-        </form>
-
-        @if($employees->count())
-            <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="bg-gray-100 dark:bg-gray-800">
-                            <th class="p-2 text-left">Nome</th>
-                            <th class="p-2 text-left">CPF</th>
-                            <th class="p-2 text-left">Obra</th>
-                            <th class="p-2 text-left">Cargo</th>
-                            <th class="p-2 text-left">Departamento</th>
-                            <th class="p-2 text-left">Admissão</th>
-                            <th class="p-2 text-left">Status</th>
+            <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full border border-gray-200 text-sm">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="border px-3 py-2 text-left">Código</th>
+                            <th class="border px-3 py-2 text-left">Colaborador</th>
+                            <th class="border px-3 py-2 text-left">Empresa</th>
+                            <th class="border px-3 py-2 text-left">Filial</th>
+                            <th class="border px-3 py-2 text-left">Obra</th>
+                            <th class="border px-3 py-2 text-left">Cargo</th>
+                            <th class="border px-3 py-2 text-left">Contrato</th>
+                            <th class="border px-3 py-2 text-left">Status</th>
+                            <th class="border px-3 py-2 text-left">Admissão</th>
+                            <th class="border px-3 py-2 text-right">Salário</th>
                         </tr>
                     </thead>
-
                     <tbody>
-                        @foreach($employees as $employee)
-                            <tr class="border-t border-gray-200 dark:border-gray-700">
-                                <td class="p-2">{{ $employee->name }}</td>
-                                <td class="p-2">{{ $employee->cpf ?? '-' }}</td>
-                                <td class="p-2">{{ $employee->work?->name ?? 'Sem obra' }}</td>
-                                <td class="p-2">{{ $employee->jobRole?->name ?? '-' }}</td>
-                                <td class="p-2">{{ $employee->department?->name ?? '-' }}</td>
-                                <td class="p-2">
-                                    {{ $employee->hire_date ? \Carbon\Carbon::parse($employee->hire_date)->format('d/m/Y') : '-' }}
+                        @forelse($this->reportData as $employee)
+                            <tr>
+                                <td class="border px-3 py-2">{{ $employee['code'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['company_name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['branch_name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['work_name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['job_role_name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['contract_type_name'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['status'] ?? '-' }}</td>
+                                <td class="border px-3 py-2">{{ $employee['admission_date'] ?? '-' }}</td>
+                                <td class="border px-3 py-2 text-right">
+                                    R$ {{ number_format((float) ($employee['salary'] ?? 0), 2, ',', '.') }}
                                 </td>
-                                <td class="p-2">{{ $employee->status ?? '-' }}</td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr>
+                                <td colspan="10" class="border px-3 py-4 text-center text-gray-500">
+                                    Nenhum colaborador encontrado.
+                                </td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
-        @else
-            <div class="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
-                Nenhum relatório gerado ainda. Use os filtros acima e clique em <strong>Gerar Relatório</strong>.
-            </div>
-        @endif
+        </div>
     </div>
 </x-filament-panels::page>

@@ -9,7 +9,6 @@ use App\Models\CostCenter;
 use App\Models\Department;
 use App\Models\EmployeeFile;
 use App\Models\JobRole;
-use App\Models\User;
 use App\Models\Work;
 use App\Models\WorkShift;
 use App\Services\EmployeeContractDocumentService;
@@ -28,23 +27,10 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class EmployeesTable
 {
-    protected static function currentUser(): ?User
-    {
-        $user = Auth::user();
-
-        return $user instanceof User ? $user : null;
-    }
-
-    protected static function can(string $permission): bool
-    {
-        return self::currentUser()?->can($permission) ?? false;
-    }
-
     public static function configure(Table $table): Table
     {
         return $table
@@ -307,16 +293,13 @@ class EmployeesTable
             ->paginated([5, 10, 25, 50, 100])
             ->recordActions([
                 ViewAction::make()
-                    ->label('Visualizar')
-                    ->visible(fn (): bool => self::can('employees.view')),
+                    ->label('Visualizar'),
 
                 EditAction::make()
-                    ->label('Editar')
-                    ->visible(fn (): bool => self::can('employees.update')),
+                    ->label('Editar'),
 
                 Action::make('generate_contract')
                     ->label('Gerar Contrato')
-                    ->visible(fn (): bool => self::can('employees.generate_contract'))
                     ->icon('heroicon-o-document-text')
                     ->color('success')
                     ->action(function ($record) {
@@ -358,7 +341,6 @@ class EmployeesTable
 
                 Action::make('employee_epi_report')
                     ->label('Relatório EPI')
-                    ->visible(fn (): bool => self::can('employees.epi_report'))
                     ->icon('heroicon-o-shield-check')
                     ->color('primary')
                     ->action(function ($record) {
@@ -459,11 +441,10 @@ class EmployeesTable
                                 ->send();
                         }
                     })
-                    ->visible(fn ($record): bool => self::can('employees.update') && in_array($record->status, ['terminated', 'inactive'], true)),
+                    ->visible(fn ($record) => in_array($record->status, ['terminated', 'inactive'], true)),
 
                 DeleteAction::make()
-                    ->label('Excluir')
-                    ->visible(fn (): bool => self::can('employees.delete')),
+                    ->label('Excluir'),
             ])
             ->emptyStateHeading('Nenhum colaborador encontrado')
             ->emptyStateDescription('Cadastre colaboradores para começar o controle de folha, vínculos e pagamentos.');

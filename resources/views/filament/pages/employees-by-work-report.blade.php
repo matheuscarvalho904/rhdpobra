@@ -1,46 +1,53 @@
 <x-filament-panels::page>
-    <form wire:submit.prevent="generate" class="space-y-6">
-        {{ $this->form }}
-
-        <div class="flex gap-3">
-            <x-filament::button type="submit">
-                Gerar Relatório
-            </x-filament::button>
-
-            <x-filament::button color="success" wire:click="exportPdf">
-                Exportar PDF
-            </x-filament::button>
+    <div class="space-y-6">
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            {{ $this->form }}
         </div>
-    </form>
 
-    @if($employees->count())
-        <div class="mt-6 overflow-x-auto rounded-xl border bg-white shadow-sm">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="bg-gray-100">
-                        <th class="p-2 text-left">Nome</th>
-                        <th class="p-2 text-left">CPF</th>
-                        <th class="p-2 text-left">Obra</th>
-                        <th class="p-2 text-left">Cargo</th>
-                        <th class="p-2 text-left">Departamento</th>
-                        <th class="p-2 text-left">Admissão</th>
-                        <th class="p-2 text-left">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($employees as $employee)
-                        <tr class="border-t">
-                            <td class="p-2">{{ $employee->name }}</td>
-                            <td class="p-2">{{ $employee->cpf }}</td>
-                            <td class="p-2">{{ $employee->work?->name ?? 'Sem obra' }}</td>
-                            <td class="p-2">{{ $employee->jobRole?->name ?? '-' }}</td>
-                            <td class="p-2">{{ $employee->department?->name ?? '-' }}</td>
-                            <td class="p-2">{{ optional($employee->hire_date)->format('d/m/Y') }}</td>
-                            <td class="p-2">{{ $employee->status }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-gray-900">Relatório por Obra</h2>
+
+            <div class="mt-4 space-y-6">
+                @forelse($this->reportData as $workName => $data)
+                    <div class="rounded-lg border border-gray-200 p-4">
+                        <div class="mb-3 flex items-center justify-between">
+                            <h3 class="text-base font-semibold text-gray-900">{{ $workName }}</h3>
+                            <span class="text-sm font-medium text-gray-600">
+                                Total: {{ $data['total'] ?? 0 }}
+                            </span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full border border-gray-200 text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="border px-3 py-2 text-left">Código</th>
+                                        <th class="border px-3 py-2 text-left">Colaborador</th>
+                                        <th class="border px-3 py-2 text-left">Cargo</th>
+                                        <th class="border px-3 py-2 text-left">Contrato</th>
+                                        <th class="border px-3 py-2 text-left">Status</th>
+                                        <th class="border px-3 py-2 text-left">Admissão</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach(($data['employees'] ?? []) as $employee)
+                                        <tr>
+                                            <td class="border px-3 py-2">{{ $employee['code'] ?? '-' }}</td>
+                                            <td class="border px-3 py-2">{{ $employee['name'] ?? '-' }}</td>
+                                            <td class="border px-3 py-2">{{ $employee['job_role_name'] ?? '-' }}</td>
+                                            <td class="border px-3 py-2">{{ $employee['contract_type_name'] ?? '-' }}</td>
+                                            <td class="border px-3 py-2">{{ $employee['status'] ?? '-' }}</td>
+                                            <td class="border px-3 py-2">{{ $employee['admission_date'] ?? '-' }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @empty
+                    <p class="text-sm text-gray-500">Nenhum colaborador encontrado.</p>
+                @endforelse
+            </div>
         </div>
-    @endif
+    </div>
 </x-filament-panels::page>

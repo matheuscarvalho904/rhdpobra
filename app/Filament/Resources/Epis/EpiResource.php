@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Epis;
 
-use App\Filament\Resources\Concerns\CanAuthorizeResource;
 use App\Filament\Resources\Epis\Pages\CreateEpi;
 use App\Filament\Resources\Epis\Pages\EditEpi;
 use App\Filament\Resources\Epis\Pages\ListEpis;
@@ -27,9 +26,6 @@ class EpiResource extends Resource
     protected static ?string $navigationLabel = 'EPIs';
     protected static ?string $modelLabel = 'EPI';
     protected static ?string $pluralModelLabel = 'EPIs';
-    use CanAuthorizeResource;
-
-    protected static string $permissionPrefix = 'epis';
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-shield-check';
     protected static string|UnitEnum|null $navigationGroup = 'Segurança do Trabalho';

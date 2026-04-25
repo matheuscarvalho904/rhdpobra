@@ -15,6 +15,7 @@ class UserForm
         return $schema
             ->components([
                 Section::make('Dados do Usuário')
+                
                     ->schema([
                         TextInput::make('name')
                             ->label('Nome')
@@ -45,8 +46,7 @@ class UserForm
                                 modifyQueryUsing: fn ($query) => $query->orderBy('name')
                             )
                             ->preload()
-                            ->searchable()
-                            ->native(false),
+                            ->searchable(),
 
                         Toggle::make('is_active')
                             ->label('Ativo')

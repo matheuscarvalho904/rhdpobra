@@ -92,6 +92,16 @@
     @php
         \Carbon\Carbon::setLocale('pt_BR');
 
+        $formatCpf = function (?string $value): string {
+            $digits = preg_replace('/\D+/', '', (string) $value);
+
+            if (strlen($digits) !== 11) {
+                return $value ?: '-';
+            }
+
+            return preg_replace('/(\d{3})(\d{3})(\d{3})(\d{2})/', '$1.$2.$3-$4', $digits);
+        };
+
         $formatCnpj = function (?string $value): string {
             $digits = preg_replace('/\D+/', '', (string) $value);
 
@@ -111,9 +121,17 @@
             $company->state ?? null,
         ])->filter()->implode(', '));
 
-        $startDate = $employee->admission_date
-            ? \Carbon\Carbon::parse($employee->admission_date)
-            : now();
+        $startDate = $employee->contract_start_date
+            ? \Carbon\Carbon::parse($employee->contract_start_date)
+            : ($employee->admission_date ? \Carbon\Carbon::parse($employee->admission_date) : now());
+
+        $contractEndDate = $employee->contract_end_date
+            ? \Carbon\Carbon::parse($employee->contract_end_date)
+            : null;
+
+        $isFixedTerm = ($employee->contract_term_type ?? 'indeterminate') === 'fixed'
+            && $employee->contract_term_days
+            && $contractEndDate;
 
         $value = number_format((float) ($employee->salary ?? 0), 2, ',', '.');
         $city = $company->city ?? $branch->city ?? $employee->city ?? 'Aripuanã';
@@ -215,9 +233,16 @@
 
         <div class="clause">
             <strong>CLÁUSULA IX</strong><br><br>
-            O presente contrato inicia-se em <strong>{{ $startDate->format('d/m/Y') }}</strong>,
-            vigorando por prazo indeterminado, podendo ser rescindido por qualquer das partes
-            mediante comunicação prévia, observadas as obrigações pendentes até a data do encerramento.
+            @if($isFixedTerm)
+                O presente contrato inicia-se em <strong>{{ $startDate->format('d/m/Y') }}</strong>,
+                com prazo determinado de <strong>{{ (int) $employee->contract_term_days }} dias</strong>,
+                encerrando-se automaticamente em <strong>{{ $contractEndDate->format('d/m/Y') }}</strong>,
+                salvo prorrogação formal por escrito entre as partes ou rescisão antecipada conforme as condições pactuadas.
+            @else
+                O presente contrato inicia-se em <strong>{{ $startDate->format('d/m/Y') }}</strong>,
+                vigorando por prazo indeterminado, podendo ser rescindido por qualquer das partes
+                mediante comunicação prévia, observadas as obrigações pendentes até a data do encerramento.
+            @endif
         </div>
 
         <div class="clause">

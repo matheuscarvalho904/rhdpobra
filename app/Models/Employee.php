@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\ContractProcessingRuleService;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -91,6 +92,10 @@ class Employee extends Model
         'salary',
         'salary_advance_amount',
         'payment_method',
+        'contract_term_type',
+        'contract_term_days',
+        'contract_start_date',
+        'contract_end_date',
 
         /*
         |--------------------------------------------------------------------------
@@ -155,6 +160,8 @@ class Employee extends Model
         'birth_date' => 'date',
         'admission_date' => 'date',
         'termination_date' => 'date',
+        'contract_start_date' => 'date',
+        'contract_end_date' => 'date',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -167,6 +174,7 @@ class Employee extends Model
         'salary' => 'decimal:2',
         'salary_advance_amount' => 'decimal:2',
         'fgts_rate' => 'decimal:2',
+        'contract_term_days' => 'integer',
 
         /*
         |--------------------------------------------------------------------------
@@ -206,6 +214,7 @@ class Employee extends Model
         'fgts_rate' => 8.00,
         'inss_optional' => false,
         'with_inss' => true,
+        'contract_term_type' => 'indeterminate',
     ];
 
     protected $appends = [
@@ -228,6 +237,7 @@ class Employee extends Model
             }
 
             $employee->applyContractRules();
+            $employee->normalizeServiceContractTermDates();
 
             if (! $employee->created_by && Auth::id()) {
                 $employee->created_by = Auth::id();
@@ -241,6 +251,10 @@ class Employee extends Model
         static::updating(function (Employee $employee) {
             if ($employee->isDirty('contract_type_id')) {
                 $employee->applyContractRules();
+            }
+
+            if ($employee->isDirty(['admission_date', 'contract_term_type', 'contract_term_days', 'contract_start_date'])) {
+                $employee->normalizeServiceContractTermDates();
             }
 
             if (Auth::id()) {
@@ -297,6 +311,49 @@ class Employee extends Model
         } elseif ($this->with_inss === null) {
             $this->with_inss = true;
         }
+    }
+
+    public function normalizeServiceContractTermDates(): void
+    {
+        if (blank($this->contract_term_type)) {
+            $this->contract_term_type = 'indeterminate';
+        }
+
+        if ($this->contract_term_type !== 'fixed') {
+            $this->contract_term_days = null;
+            $this->contract_end_date = null;
+            $this->contract_start_date = $this->contract_start_date ?: $this->admission_date;
+            return;
+        }
+
+        $allowedDays = [30, 45, 60, 90, 120, 180];
+        $days = (int) ($this->contract_term_days ?? 0);
+
+        if (! in_array($days, $allowedDays, true)) {
+            $this->contract_term_days = null;
+            $this->contract_end_date = null;
+            return;
+        }
+
+        $startDate = $this->contract_start_date ?: $this->admission_date;
+
+        if (! $startDate) {
+            $this->contract_end_date = null;
+            return;
+        }
+
+        $this->contract_start_date = $startDate;
+        $this->contract_end_date = Carbon::parse($startDate)
+            ->addDays($days - 1)
+            ->format('Y-m-d');
+    }
+
+    public function hasFixedServiceContractTerm(): bool
+    {
+        return $this->contract_term_type === 'fixed'
+            && filled($this->contract_term_days)
+            && filled($this->contract_start_date)
+            && filled($this->contract_end_date);
     }
 
     /*

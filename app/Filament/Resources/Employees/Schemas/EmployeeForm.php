@@ -525,6 +525,14 @@ class EmployeeForm
                                             'xl' => 2,
                                         ])
                                         ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                            if ($state && ! $get('contract_start_date')) {
+                                                $set('contract_start_date', $state);
+                                            }
+
+                                            if ($get('contract_term_type') === 'fixed') {
+                                                self::recalculateServiceContractDates($set, $get);
+                                            }
+
                                             if ($get('has_experience_period')) {
                                                 $set('experience_start_date', $state);
                                                 self::recalculateExperienceDates($set, $get);
@@ -628,6 +636,23 @@ class EmployeeForm
 
                                             $set('has_irrf', (bool) ($rules['has_irrf'] ?? true));
 
+                                            if (self::isServiceContract($state ? (int) $state : null)) {
+                                                if (! $get('contract_term_type')) {
+                                                    $set('contract_term_type', 'indeterminate');
+                                                }
+
+                                                if (! $get('contract_start_date') && $get('admission_date')) {
+                                                    $set('contract_start_date', $get('admission_date'));
+                                                }
+
+                                                self::recalculateServiceContractDates($set, $get);
+                                            } else {
+                                                $set('contract_term_type', null);
+                                                $set('contract_term_days', null);
+                                                $set('contract_start_date', null);
+                                                $set('contract_end_date', null);
+                                            }
+
                                             if (! self::isCltContract($state ? (int) $state : null)) {
                                                 $set('has_experience_period', false);
                                                 $set('experience_model', null);
@@ -644,6 +669,117 @@ class EmployeeForm
                                                 self::applyExperienceModel($set, $get, $get('experience_model'));
                                             }
                                         }),
+
+                                    Section::make('Contrato PF / PJ')
+                                        ->description('Controle de prazo para contratos PF, PJ, autônomo e RPA, com início pela admissão e término calculado automaticamente.')
+                                        ->columns([
+                                            'default' => 1,
+                                            'md' => 6,
+                                            'xl' => 12,
+                                        ])
+                                        ->visible(fn (Get $get) => self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null))
+                                        ->schema([
+                                            Select::make('contract_term_type')
+                                                ->label('Tipo de Prazo')
+                                                ->options([
+                                                    'indeterminate' => 'Indeterminado',
+                                                    'fixed' => 'Determinado',
+                                                ])
+                                                ->default('indeterminate')
+                                                ->native(false)
+                                                ->live()
+                                                ->dehydrated(true)
+                                                ->afterStateHydrated(function (Set $set, Get $get, $state): void {
+                                                    if (! $state && self::isServiceContract($get('contract_type_id') ? (int) $get('contract_type_id') : null)) {
+                                                        $set('contract_term_type', 'indeterminate');
+                                                    }
+
+                                                    if (! $get('contract_start_date') && $get('admission_date')) {
+                                                        $set('contract_start_date', $get('admission_date'));
+                                                    }
+
+                                                    self::recalculateServiceContractDates($set, $get);
+                                                })
+                                                ->afterStateUpdated(function (Set $set, Get $get, $state): void {
+                                                    if ($state === 'indeterminate') {
+                                                        $set('contract_term_days', null);
+                                                        $set('contract_end_date', null);
+                                                    }
+
+                                                    if (! $get('contract_start_date') && $get('admission_date')) {
+                                                        $set('contract_start_date', $get('admission_date'));
+                                                    }
+
+                                                    self::recalculateServiceContractDates($set, $get);
+                                                })
+                                                ->columnSpan([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ]),
+
+                                            Select::make('contract_term_days')
+                                                ->label('Prazo do Contrato')
+                                                ->options([
+                                                    30 => '30 dias',
+                                                    45 => '45 dias',
+                                                    60 => '60 dias',
+                                                    90 => '90 dias',
+                                                    120 => '120 dias',
+                                                    180 => '180 dias',
+                                                ])
+                                                ->native(false)
+                                                ->live()
+                                                ->dehydrated(true)
+                                                ->visible(fn (Get $get) => $get('contract_term_type') === 'fixed')
+                                                ->required(fn (Get $get) => $get('contract_term_type') === 'fixed')
+                                                ->afterStateUpdated(function (Set $set, Get $get): void {
+                                                    if (! $get('contract_start_date') && $get('admission_date')) {
+                                                        $set('contract_start_date', $get('admission_date'));
+                                                    }
+
+                                                    self::recalculateServiceContractDates($set, $get);
+                                                })
+                                                ->columnSpan([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ]),
+
+                                            DatePicker::make('contract_start_date')
+                                                ->label('Início do Contrato')
+                                                ->native(false)
+                                                ->live()
+                                                ->dehydrated(true)
+                                                ->afterStateHydrated(function (Set $set, Get $get, $state): void {
+                                                    if (! $state && $get('admission_date')) {
+                                                        $set('contract_start_date', $get('admission_date'));
+                                                    }
+
+                                                    self::recalculateServiceContractDates($set, $get);
+                                                })
+                                                ->afterStateUpdated(function (Set $set, Get $get): void {
+                                                    self::recalculateServiceContractDates($set, $get);
+                                                })
+                                                ->columnSpan([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ]),
+
+                                            DatePicker::make('contract_end_date')
+                                                ->label('Fim do Contrato')
+                                                ->native(false)
+                                                ->disabled()
+                                                ->dehydrated(true)
+                                                ->visible(fn (Get $get) => $get('contract_term_type') === 'fixed')
+                                                ->columnSpan([
+                                                    'default' => 1,
+                                                    'md' => 2,
+                                                    'xl' => 3,
+                                                ]),
+                                        ])
+                                        ->columnSpanFull(),
 
                                     Toggle::make('has_experience_period')
                                         ->label('Contrato com Experiência')
@@ -1175,6 +1311,59 @@ class EmployeeForm
         $name = mb_strtolower(trim((string) $contractType->name));
 
         return str_contains($name, 'clt');
+    }
+
+    protected static function isServiceContract(?int $contractTypeId): bool
+    {
+        if (! $contractTypeId) {
+            return false;
+        }
+
+        $contractType = ContractType::find($contractTypeId);
+
+        if (! $contractType) {
+            return false;
+        }
+
+        $name = mb_strtolower(trim((string) $contractType->name));
+
+        return str_contains($name, 'pf')
+            || str_contains($name, 'pj')
+            || str_contains($name, 'pessoa física')
+            || str_contains($name, 'pessoa fisica')
+            || str_contains($name, 'pessoa jurídica')
+            || str_contains($name, 'pessoa juridica')
+            || str_contains($name, 'autônomo')
+            || str_contains($name, 'autonomo')
+            || str_contains($name, 'rpa');
+    }
+
+    protected static function recalculateServiceContractDates(Set $set, Get $get): void
+    {
+        if ($get('contract_term_type') !== 'fixed') {
+            $set('contract_end_date', null);
+            return;
+        }
+
+        $days = (int) ($get('contract_term_days') ?: 0);
+        $allowedDays = [30, 45, 60, 90, 120, 180];
+
+        if (! in_array($days, $allowedDays, true)) {
+            $set('contract_end_date', null);
+            return;
+        }
+
+        $startDate = $get('contract_start_date') ?: $get('admission_date');
+
+        if (! $startDate) {
+            $set('contract_end_date', null);
+            return;
+        }
+
+        $set('contract_start_date', $startDate);
+        $set('contract_end_date', Carbon::parse($startDate)
+            ->addDays($days - 1)
+            ->format('Y-m-d'));
     }
 
         protected static function applyExperienceModel(Set $set, Get $get, ?string $model): void

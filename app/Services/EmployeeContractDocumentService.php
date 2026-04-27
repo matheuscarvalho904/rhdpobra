@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Employee;
 use Barryvdh\DomPDF\Facade\Pdf;
 use RuntimeException;
-
+//contrato
 class EmployeeContractDocumentService
 {
     public function generate(Employee $employee)

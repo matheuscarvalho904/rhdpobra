@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
+use App\Models\EmployeeExternalMapping;
 
 class Employee extends Model
 {
@@ -520,6 +521,16 @@ class Employee extends Model
 public function epiDeliveries(): HasMany
 {
     return $this->hasMany(\App\Models\EmployeeEpiDelivery::class);
+}
+public function externalMappings(): HasMany
+{
+    return $this->hasMany(EmployeeExternalMapping::class);
+}
+
+public function solidesMapping(): HasOne
+{
+    return $this->hasOne(EmployeeExternalMapping::class)
+        ->where('provider', 'solides');
 }
 
 }

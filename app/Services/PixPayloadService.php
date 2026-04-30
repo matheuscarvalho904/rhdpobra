@@ -13,7 +13,7 @@ class PixPayloadService
         float $amount,
         string $txid = 'ADIANTAMENTO'
     ): string {
-        $pixKey = preg_replace('/\s+/', '', trim($pixKey));
+        $pixKey = $this->normalizePixKey($pixKey);
 
         if ($pixKey === '') {
             throw new InvalidArgumentException('Chave PIX inválida.');
@@ -64,6 +64,41 @@ class PixPayloadService
         $crc = str_pad($crc, 4, '0', STR_PAD_LEFT);
 
         return $payload . $crc;
+    }
+
+    protected function normalizePixKey(string $pixKey): string
+    {
+        $pixKey = trim($pixKey);
+
+        if ($pixKey === '') {
+            return '';
+        }
+
+        if (filter_var($pixKey, FILTER_VALIDATE_EMAIL)) {
+            return mb_strtolower($pixKey);
+        }
+
+        if (str_starts_with($pixKey, '+')) {
+            $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
+
+            return $digits !== '' ? '+' . $digits : '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
+
+        if ($digits === '') {
+            return preg_replace('/\s+/', '', $pixKey) ?? '';
+        }
+
+        if (strlen($digits) === 11 || strlen($digits) === 10) {
+            return '+55' . $digits;
+        }
+
+        if (str_starts_with($digits, '55') && (strlen($digits) === 12 || strlen($digits) === 13)) {
+            return '+' . $digits;
+        }
+
+        return $digits;
     }
 
     protected function buildField(string $id, string $value): string

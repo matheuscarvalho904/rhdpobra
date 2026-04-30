@@ -313,45 +313,6 @@ class Employee extends Model
         }
     }
 
-
-    public function setPixKeyAttribute($value): void
-    {
-        $this->attributes['pix_key'] = $this->normalizePixKeyForStorage($value, $this->pix_key_type ?? null);
-    }
-
-    protected function normalizePixKeyForStorage($value, ?string $type): ?string
-    {
-        if (blank($value)) {
-            return null;
-        }
-
-        $type = trim((string) $type);
-
-        if (in_array($type, ['cpf', 'cnpj'], true)) {
-            return preg_replace('/\D+/', '', (string) $value) ?: null;
-        }
-
-        if ($type === 'phone') {
-            $digits = preg_replace('/\D+/', '', (string) $value);
-
-            if (! $digits) {
-                return null;
-            }
-
-            if (str_starts_with($digits, '55')) {
-                return '+' . $digits;
-            }
-
-            return '+55' . $digits;
-        }
-
-        if ($type === 'email') {
-            return trim(mb_strtolower((string) $value));
-        }
-
-        return trim((string) $value);
-    }
-
     public function normalizeServiceContractTermDates(): void
     {
         if (blank($this->contract_term_type)) {
@@ -484,21 +445,11 @@ class Employee extends Model
                 ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $digits)
                 : $this->pix_key,
 
-            'phone' => (function () use ($digits) {
-                if (str_starts_with($digits, '55')) {
-                    $digits = substr($digits, 2);
-                }
-
-                if (strlen($digits) === 11) {
-                    return preg_replace('/(\d{2})(\d{5})(\d{4})/', '+55 ($1) $2-$3', $digits);
-                }
-
-                if (strlen($digits) === 10) {
-                    return preg_replace('/(\d{2})(\d{4})(\d{4})/', '+55 ($1) $2-$3', $digits);
-                }
-
-                return $this->pix_key;
-            })(),
+            'phone' => strlen($digits) === 11
+                ? preg_replace('/(\d{2})(\d{5})(\d{4})/', '($1) $2-$3', $digits)
+                : (strlen($digits) === 10
+                    ? preg_replace('/(\d{2})(\d{4})(\d{4})/', '($1) $2-$3', $digits)
+                    : $this->pix_key),
 
             default => $this->pix_key,
         };
@@ -620,23 +571,23 @@ class Employee extends Model
     }
 
     public function files(): HasMany
-    {
-        return $this->hasMany(EmployeeFile::class);
-    }
+{
+    return $this->hasMany(EmployeeFile::class);
+}
 
-    public function epiDeliveries(): HasMany
-    {
-        return $this->hasMany(EmployeeEpiDelivery::class);
-    }
+public function epiDeliveries(): HasMany
+{
+    return $this->hasMany(\App\Models\EmployeeEpiDelivery::class);
+}
+public function externalMappings(): HasMany
+{
+    return $this->hasMany(EmployeeExternalMapping::class);
+}
 
-    public function externalMappings(): HasMany
-    {
-        return $this->hasMany(EmployeeExternalMapping::class);
-    }
+public function solidesMapping(): HasOne
+{
+    return $this->hasOne(EmployeeExternalMapping::class)
+        ->where('provider', 'solides');
+}
 
-    public function solidesMapping(): HasOne
-    {
-        return $this->hasOne(EmployeeExternalMapping::class)
-            ->where('provider', 'solides');
-    }
 }

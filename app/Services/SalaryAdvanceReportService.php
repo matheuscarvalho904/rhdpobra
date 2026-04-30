@@ -58,6 +58,7 @@ class SalaryAdvanceReportService
 
         $payload = $this->pixPayloadService->generatePayload(
             pixKey: $pixKey,
+            pixKeyType: $pixKeyType,
             beneficiaryName: $beneficiaryName,
             city: $city,
             amount: (float) $salaryAdvance->amount,
@@ -113,7 +114,15 @@ class SalaryAdvanceReportService
             return null;
         }
 
-        $digits = preg_replace('/\D+/', '', $pixKey);
+        if (filter_var($pixKey, FILTER_VALIDATE_EMAIL)) {
+            return 'email';
+        }
+
+        if (str_starts_with($pixKey, '+')) {
+            return 'phone';
+        }
+
+        $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
 
         if (strlen($digits) === 11 && $digits === $pixKey) {
             return 'cpf';
@@ -121,10 +130,6 @@ class SalaryAdvanceReportService
 
         if (strlen($digits) === 14 && $digits === $pixKey) {
             return 'cnpj';
-        }
-
-        if (filter_var($pixKey, FILTER_VALIDATE_EMAIL)) {
-            return 'email';
         }
 
         if (strlen($digits) >= 10 && strlen($digits) <= 13) {

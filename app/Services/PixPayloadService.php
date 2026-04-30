@@ -8,12 +8,13 @@ class PixPayloadService
 {
     public function generatePayload(
         string $pixKey,
+        string $pixKeyType,
         string $beneficiaryName,
         string $city,
         float $amount,
         string $txid = 'ADIANTAMENTO'
     ): string {
-        $pixKey = $this->normalizePixKey($pixKey);
+        $pixKey = $this->normalizePixKey($pixKey, $pixKeyType);
 
         if ($pixKey === '') {
             throw new InvalidArgumentException('Chave PIX inválida.');
@@ -41,8 +42,8 @@ class PixPayloadService
 
         $merchantAccount = $this->buildField(
             '26',
-            $this->buildField('00', 'BR.GOV.BCB.PIX')
-            . $this->buildField('01', $pixKey)
+            $this->buildField('00', 'BR.GOV.BCB.PIX') .
+            $this->buildField('01', $pixKey)
         );
 
         $payload =
@@ -54,10 +55,7 @@ class PixPayloadService
             '5802BR' .
             $this->buildField('59', $beneficiaryName) .
             $this->buildField('60', $city) .
-            $this->buildField(
-                '62',
-                $this->buildField('05', $txid)
-            ) .
+            $this->buildField('62', $this->buildField('05', $txid)) .
             '6304';
 
         $crc = strtoupper(dechex($this->crc16($payload)));
@@ -66,39 +64,43 @@ class PixPayloadService
         return $payload . $crc;
     }
 
-    protected function normalizePixKey(string $pixKey): string
+    protected function normalizePixKey(string $pixKey, string $pixKeyType): string
     {
         $pixKey = trim($pixKey);
+        $pixKeyType = mb_strtolower(trim($pixKeyType));
 
         if ($pixKey === '') {
             return '';
         }
 
-        if (filter_var($pixKey, FILTER_VALIDATE_EMAIL)) {
-            return mb_strtolower($pixKey);
-        }
+        return match ($pixKeyType) {
+            'cpf' => preg_replace('/\D+/', '', $pixKey) ?? '',
 
-        if (str_starts_with($pixKey, '+')) {
-            $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
+            'cnpj' => preg_replace('/\D+/', '', $pixKey) ?? '',
 
-            return $digits !== '' ? '+' . $digits : '';
-        }
+            'phone' => $this->normalizePhonePixKey($pixKey),
 
+            'email' => mb_strtolower($pixKey),
+
+            'random' => preg_replace('/\s+/', '', $pixKey) ?? '',
+
+            default => preg_replace('/\s+/', '', $pixKey) ?? '',
+        };
+    }
+
+    protected function normalizePhonePixKey(string $pixKey): string
+    {
         $digits = preg_replace('/\D+/', '', $pixKey) ?? '';
 
         if ($digits === '') {
-            return preg_replace('/\s+/', '', $pixKey) ?? '';
+            return '';
         }
 
-        if (strlen($digits) === 11 || strlen($digits) === 10) {
-            return '+55' . $digits;
-        }
-
-        if (str_starts_with($digits, '55') && (strlen($digits) === 12 || strlen($digits) === 13)) {
+        if (str_starts_with($digits, '55')) {
             return '+' . $digits;
         }
 
-        return $digits;
+        return '+55' . $digits;
     }
 
     protected function buildField(string $id, string $value): string
@@ -135,6 +137,7 @@ class PixPayloadService
         $value = trim($value);
 
         $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+
         if ($converted !== false) {
             $value = $converted;
         }
@@ -151,6 +154,7 @@ class PixPayloadService
         $value = trim($value);
 
         $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+
         if ($converted !== false) {
             $value = $converted;
         }

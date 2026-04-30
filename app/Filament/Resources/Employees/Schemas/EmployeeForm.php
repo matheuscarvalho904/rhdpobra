@@ -1042,8 +1042,27 @@ class EmployeeForm
                                             default => 'Escolha o tipo de chave para aplicar a máscara correta.',
                                         })
                                         ->dehydrateStateUsing(function ($state, Get $get) {
+                                            if (blank($state)) {
+                                                return null;
+                                            }
+
                                             return match ($get('pix_key_type')) {
-                                                'cpf', 'cnpj', 'phone' => self::digits($state),
+                                                'cpf', 'cnpj' => self::digits($state),
+
+                                                'phone' => (function () use ($state) {
+                                                    $digits = self::digits($state);
+
+                                                    if (! $digits) {
+                                                        return null;
+                                                    }
+
+                                                    if (str_starts_with($digits, '55') && strlen($digits) >= 12) {
+                                                        return '+' . $digits;
+                                                    }
+
+                                                    return '+55' . $digits;
+                                                })(),
+
                                                 'email' => filled($state) ? trim(mb_strtolower((string) $state)) : null,
                                                 default => filled($state) ? trim((string) $state) : null,
                                             };

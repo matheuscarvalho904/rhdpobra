@@ -1046,25 +1046,27 @@ class EmployeeForm
                                                 return null;
                                             }
 
-                                            return match ($get('pix_key_type')) {
+                                            $type = $get('pix_key_type');
+
+                                            if ($type === 'phone') {
+                                                $digits = self::digits($state);
+
+                                                if (! $digits) {
+                                                    return null;
+                                                }
+
+                                                // Padrão PIX telefone: +55 + DDD + número.
+                                                if (str_starts_with($digits, '55')) {
+                                                    return '+' . $digits;
+                                                }
+
+                                                return '+55' . $digits;
+                                            }
+
+                                            return match ($type) {
                                                 'cpf', 'cnpj' => self::digits($state),
-
-                                                'phone' => (function () use ($state) {
-                                                    $digits = self::digits($state);
-
-                                                    if (! $digits) {
-                                                        return null;
-                                                    }
-
-                                                    if (str_starts_with($digits, '55') && strlen($digits) >= 12) {
-                                                        return '+' . $digits;
-                                                    }
-
-                                                    return '+55' . $digits;
-                                                })(),
-
-                                                'email' => filled($state) ? trim(mb_strtolower((string) $state)) : null,
-                                                default => filled($state) ? trim((string) $state) : null,
+                                                'email' => trim(mb_strtolower((string) $state)),
+                                                default => trim((string) $state),
                                             };
                                         })
                                         ->columnSpan([

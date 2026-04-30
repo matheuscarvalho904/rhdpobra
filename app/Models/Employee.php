@@ -445,11 +445,21 @@ class Employee extends Model
                 ? preg_replace('/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/', '$1.$2.$3/$4-$5', $digits)
                 : $this->pix_key,
 
-            'phone' => strlen($digits) === 11
-                ? preg_replace('/(\d{2})(\d{5})(\d{4})/', '($1) $2-$3', $digits)
-                : (strlen($digits) === 10
-                    ? preg_replace('/(\d{2})(\d{4})(\d{4})/', '($1) $2-$3', $digits)
-                    : $this->pix_key),
+            'phone' => (function () use ($digits) {
+            if (str_starts_with($digits, '55')) {
+                $digits = substr($digits, 2);
+            }
+
+            if (strlen($digits) === 11) {
+                return preg_replace('/(\d{2})(\d{5})(\d{4})/', '+55 ($1) $2-$3', $digits);
+            }
+
+            if (strlen($digits) === 10) {
+                return preg_replace('/(\d{2})(\d{4})(\d{4})/', '+55 ($1) $2-$3', $digits);
+            }
+
+            return $this->pix_key;
+        })(),
 
             default => $this->pix_key,
         };

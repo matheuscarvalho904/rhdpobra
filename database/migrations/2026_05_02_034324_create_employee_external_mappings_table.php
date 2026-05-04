@@ -17,6 +17,7 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->string('provider')->default('solides');
+
             $table->string('external_employee_id')->nullable();
             $table->string('external_code')->nullable();
             $table->string('external_name')->nullable();
@@ -25,9 +26,10 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['employee_id', 'provider']);
-            $table->index(['provider', 'external_employee_id']);
-            $table->index(['provider', 'external_code']);
+            $table->unique(['employee_id', 'provider'], 'employee_external_mappings_employee_provider_unique');
+
+            $table->index(['provider', 'external_employee_id'], 'employee_external_mappings_provider_employee_idx');
+            $table->index(['provider', 'external_code'], 'employee_external_mappings_provider_code_idx');
         });
     }
 

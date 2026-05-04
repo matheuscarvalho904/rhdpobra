@@ -589,5 +589,9 @@ public function solidesMapping(): HasOne
     return $this->hasOne(EmployeeExternalMapping::class)
         ->where('provider', 'solides');
 }
+public function workSchedules()
+{
+    return $this->hasMany(\App\Models\EmployeeWorkSchedule::class);
+}
 
 }

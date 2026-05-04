@@ -60,4 +60,13 @@ class Company extends Model
     {
         return $this->hasMany(UserAccessScope::class);
     }
+    public function epis(): HasMany
+{
+    return $this->hasMany(Epi::class);
+}
+
+public function epiDeliveries(): HasMany
+{
+    return $this->hasMany(EmployeeEpiDelivery::class);
+}
 }

@@ -24,9 +24,4 @@ class EmployeeExternalMapping extends Model
     {
         return $this->belongsTo(Employee::class);
     }
-
-    public function isSolides(): bool
-    {
-        return $this->provider === 'solides';
-    }
 }

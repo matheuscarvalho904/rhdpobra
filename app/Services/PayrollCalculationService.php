@@ -185,7 +185,8 @@ public function calculate(Employee $employee, array $context = []): array
         Collection $variableEvents,
         float $salaryAdvanceDiscount = 0
     ): array {
-        $salaryData = $this->resolveBaseSalaryData($employee, $context, prorate: false);
+        
+        $salaryData = $this->resolveBaseSalaryData($employee, $context, prorate: true);        
         $baseAmount = $salaryData['base_salary'];
 
         $eventSummary = $this->summarizeEvents($employee, $fixedEvents, $variableEvents);
@@ -411,17 +412,21 @@ public function calculate(Employee $employee, array $context = []): array
     }
 
     protected function getEmployeeVariableEvents(Employee $employee, ?int $competencyId): Collection
-    {
-        if (! $competencyId) {
-            return collect();
-        }
-
-        return EmployeeVariableEvent::query()
-            ->with('payrollEvent')
-            ->where('employee_id', $employee->id)
-            ->where('payroll_competency_id', $competencyId)
-            ->get();
+{
+    if (! $competencyId) {
+        return collect();
     }
+
+    return EmployeeVariableEvent::query()
+        ->with('payrollEvent')
+        ->where('employee_id', $employee->id)
+        ->where(function ($query) use ($competencyId) {
+            $query
+                ->where('payroll_competency_id', $competencyId)
+                ->orWhereNull('payroll_competency_id');
+        })
+        ->get();
+}
 
     protected function getSalaryAdvanceDiscount(Employee $employee, ?int $competencyId): float
     {
@@ -805,9 +810,12 @@ public function calculate(Employee $employee, array $context = []): array
             ];
         }
 
-        $admissionDate = $this->resolveEmployeeAdmissionDate($employee);
-        $terminationDate = $this->resolveEmployeeTerminationDate($employee);
+            $admissionDate = $this->parseDate($context['admission_date'] ?? null)
+                ?? $this->resolveEmployeeAdmissionDate($employee);
 
+            $terminationDate = $this->parseDate($context['termination_date'] ?? null)
+                ?? $this->resolveEmployeeTerminationDate($employee);
+                
         if (! $admissionDate && ! $terminationDate) {
             return [
                 'base_salary' => $fullSalary,
@@ -915,27 +923,29 @@ public function calculate(Employee $employee, array $context = []): array
     }
 
     protected function resolveEmployeeAdmissionDate(Employee $employee): ?CarbonInterface
-    {
-        return $this->parseDate(
-            $employee->admission_date
-                ?? $employee->hire_date
-                ?? $employee->admitted_at
-                ?? $employee->start_date
-                ?? null
-        );
-    }
+{
+    return $this->parseDate(
+        $employee->currentContract?->admission_date
+            ?? $employee->currentContract?->hire_date
+            ?? $employee->admission_date
+            ?? $employee->hire_date
+            ?? $employee->admitted_at
+            ?? $employee->start_date
+            ?? null
+    );
+}
 
     protected function resolveEmployeeTerminationDate(Employee $employee): ?CarbonInterface
-    {
-        return $this->parseDate(
-            $employee->termination_date
-                ?? $employee->dismissal_date
-                ?? $employee->demission_date
-                ?? $employee->end_date
-                ?? null
-        );
-    }
-
+{
+    return $this->parseDate(
+        $employee->currentContract?->termination_date
+            ?? $employee->termination_date
+            ?? $employee->dismissal_date
+            ?? $employee->demission_date
+            ?? $employee->end_date
+            ?? null
+    );
+}
     protected function resolveWorkedDaysInPeriod(
         CarbonInterface $periodStart,
         CarbonInterface $periodEnd,

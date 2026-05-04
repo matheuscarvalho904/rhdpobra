@@ -2,10 +2,14 @@
 
 namespace App\Filament\Resources\TimeEntries\Tables;
 
-use Filament\Actions\EditAction;
-use Filament\Tables\Columns\IconColumn;
+use App\Models\TimeEntry;
+use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class TimeEntriesTable
 {
@@ -13,106 +17,147 @@ class TimeEntriesTable
     {
         return $table
             ->columns([
+                TextColumn::make('company.name')
+                    ->label('Empresa')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('-'),
+
+                TextColumn::make('employee.name')
+                    ->label('Colaborador')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('Não vinculado'),
+
                 TextColumn::make('entry_date')
                     ->label('Data')
                     ->date('d/m/Y')
                     ->sortable(),
 
-                TextColumn::make('employee.registration_number')
-                    ->label('Matrícula')
-                    ->searchable()
+                TextColumn::make('entry_datetime')
+                    ->label('Marcação')
+                    ->dateTime('d/m/Y H:i:s')
                     ->sortable(),
 
-                TextColumn::make('employee.name')
-                    ->label('Colaborador')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('company.name')
-                    ->label('Empresa')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('work.name')
-                    ->label('Obra')
-                    ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('attendanceOccurrence.name')
-                    ->label('Ocorrência')
-                    ->placeholder('-')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('entry_1')
-                    ->label('Entrada 1')
-                    ->time('H:i')
-                    ->toggleable(),
-
-                TextColumn::make('exit_1')
-                    ->label('Saída 1')
-                    ->time('H:i')
-                    ->toggleable(),
-
-                TextColumn::make('entry_2')
-                    ->label('Entrada 2')
-                    ->time('H:i')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('exit_2')
-                    ->label('Saída 2')
-                    ->time('H:i')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('worked_minutes')
-                    ->label('Trabalhado (min)')
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('overtime_minutes')
-                    ->label('Extra (min)')
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('lateness_minutes')
-                    ->label('Atraso (min)')
-                    ->sortable()
-                    ->toggleable(),
-
-                TextColumn::make('absence_minutes')
-                    ->label('Falta (min)')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('night_minutes')
-                    ->label('Noturno (min)')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('source')
-                    ->label('Origem')
+                TextColumn::make('type')
+                    ->label('Tipo')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state) => match ($state) {
-                        'manual' => 'Manual',
-                        'import' => 'Importação',
-                        'integration' => 'Integração',
-                        default => $state,
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'entrada', 'in', 'IN', 'ENTRY' => 'Entrada',
+                        'saida', 'saída', 'out', 'OUT', 'EXIT' => 'Saída',
+                        'unknown' => 'Não identificado',
+                        default => $state ?: 'Não identificado',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'entrada', 'in', 'IN', 'ENTRY' => 'success',
+                        'saida', 'saída', 'out', 'OUT', 'EXIT' => 'danger',
+                        default => 'gray',
                     }),
 
-                IconColumn::make('is_manual')
-                    ->label('Manual')
-                    ->boolean(),
+                TextColumn::make('status')
+                    ->label('Status')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'valid' => 'Válida',
+                        'pending' => 'Pendente',
+                        'ignored' => 'Ignorada',
+                        'adjusted' => 'Ajustada',
+                        default => $state ?: '-',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'valid' => 'success',
+                        'pending' => 'warning',
+                        'ignored' => 'gray',
+                        'adjusted' => 'info',
+                        default => 'gray',
+                    }),
+
+                TextColumn::make('provider')
+                    ->label('Origem')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'solides' => 'Sólides',
+                        default => $state ?: '-',
+                    }),
+
+                TextColumn::make('external_employee_id')
+                    ->label('ID Externo Colaborador')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('external_id')
+                    ->label('ID Externo Marcação')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('created_at')
-                    ->label('Criado em')
+                    ->label('Importado em')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->filters([
+                SelectFilter::make('company_id')
+                    ->label('Empresa')
+                    ->relationship('company', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('employee_id')
+                    ->label('Colaborador')
+                    ->relationship('employee', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                SelectFilter::make('status')
+                    ->label('Status')
+                    ->options([
+                        'valid' => 'Válida',
+                        'pending' => 'Pendente',
+                        'ignored' => 'Ignorada',
+                        'adjusted' => 'Ajustada',
+                    ]),
+
+                SelectFilter::make('provider')
+                    ->label('Origem')
+                    ->options([
+                        'solides' => 'Sólides',
+                    ]),
+
+                Filter::make('entry_date')
+                    ->label('Período')
+                    ->form([
+                        DatePicker::make('from')
+                            ->label('Data inicial'),
+
+                        DatePicker::make('until')
+                            ->label('Data final'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when(
+                                $data['from'] ?? null,
+                                fn (Builder $query, $date): Builder => $query->whereDate('entry_date', '>=', $date),
+                            )
+                            ->when(
+                                $data['until'] ?? null,
+                                fn (Builder $query, $date): Builder => $query->whereDate('entry_date', '<=', $date),
+                            );
+                    }),
+            ])
+            ->defaultSort('entry_datetime', 'desc')
             ->recordActions([
-                EditAction::make(),
+                Action::make('visualizar')
+                    ->label('Visualizar')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->modalHeading('Detalhes da Marcação')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Fechar')
+                    ->modalContent(fn (TimeEntry $record) => view(
+                        'filament.resources.time-entries.view-entry',
+                        ['record' => $record]
+                    )),
             ]);
     }
 }

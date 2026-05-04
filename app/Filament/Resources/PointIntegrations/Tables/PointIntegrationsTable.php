@@ -3,13 +3,14 @@
 namespace App\Filament\Resources\PointIntegrations\Tables;
 
 use App\Models\PointIntegration;
-use App\Services\Integrations\Solides\SolidesPointService;
+use App\Services\Integrations\Solides\SolidesPunchImportService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -24,21 +25,15 @@ class PointIntegrationsTable
                 TextColumn::make('company.name')
                     ->label('Empresa')
                     ->searchable()
-                    ->sortable()
-                    ->placeholder('Todas'),
+                    ->sortable(),
 
                 TextColumn::make('name')
                     ->label('Integração')
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
 
                 TextColumn::make('provider')
                     ->label('Sistema')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'solides' => 'Sólides',
-                        default => $state ?: '-',
-                    }),
+                    ->badge(),
 
                 IconColumn::make('active')
                     ->label('Ativa')
@@ -47,37 +42,48 @@ class PointIntegrationsTable
                 TextColumn::make('last_sync_at')
                     ->label('Última Sincronização')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->placeholder('Nunca sincronizado'),
-
-                TextColumn::make('created_at')
-                    ->label('Criado em')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->placeholder('Nunca'),
             ])
-            ->defaultSort('id', 'desc')
+
             ->recordActions([
-                Action::make('testConnection')
-                    ->label('Testar Conexão')
-                    ->icon('heroicon-o-signal')
-                    ->color('info')
-                    ->requiresConfirmation()
-                    ->modalHeading('Testar conexão com Sólides')
-                    ->modalDescription('O sistema tentará conectar na API usando a URL base e o token informado.')
-                    ->action(function (PointIntegration $record): void {
-                        $service = new SolidesPointService($record);
+                /*
+                |--------------------------------------------------------------------------
+                | 🔥 IMPORTAR MARCAÇÕES
+                |--------------------------------------------------------------------------
+                */
+                Action::make('importPunches')
+                    ->label('Importar Marcações')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('success')
 
-                        $result = $service->testConnection();
+                    ->form([
+                        DatePicker::make('start_date')
+                            ->label('Data Inicial')
+                            ->required(),
 
-                        if ($result['success'] ?? false) {
-                            $record->update([
-                                'last_sync_at' => now(),
-                            ]);
+                        DatePicker::make('end_date')
+                            ->label('Data Final')
+                            ->required(),
+                    ])
+
+                    ->action(function (PointIntegration $record, array $data) {
+
+                        $import = app(SolidesPunchImportService::class)
+                            ->import(
+                                $record,
+                                $data['start_date'],
+                                $data['end_date']
+                            );
+
+                        if ($import->status === 'completed') {
 
                             Notification::make()
-                                ->title('Conexão realizada com sucesso')
-                                ->body($result['message'] ?? 'A API respondeu corretamente.')
+                                ->title('Importação concluída')
+                                ->body(
+                                    "Total: {$import->total_records}\n" .
+                                    "Importados: {$import->imported_records}\n" .
+                                    "Ignorados: {$import->ignored_records}"
+                                )
                                 ->success()
                                 ->send();
 
@@ -85,25 +91,29 @@ class PointIntegrationsTable
                         }
 
                         Notification::make()
-                            ->title('Falha na conexão')
-                            ->body($result['message'] ?? 'Não foi possível conectar com a API.')
+                            ->title('Erro na importação')
+                            ->body($import->error_message ?? 'Erro desconhecido')
                             ->danger()
                             ->send();
-                    }),
+                    })
 
-                ViewAction::make()
-                    ->label('Visualizar'),
+                    ->modalHeading('Importar Marcações de Ponto')
+                    ->modalDescription('Selecione o período para importar as marcações da Sólides/Tangerino.')
+                    ->modalSubmitActionLabel('Importar'),
 
-                EditAction::make()
-                    ->label('Editar'),
-
-                DeleteAction::make()
-                    ->label('Excluir'),
+                /*
+                |--------------------------------------------------------------------------
+                | OUTRAS ACTIONS
+                |--------------------------------------------------------------------------
+                */
+                ViewAction::make(),
+                EditAction::make(),
+                DeleteAction::make(),
             ])
+
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make()
-                        ->label('Excluir selecionados'),
+                    DeleteBulkAction::make(),
                 ]),
             ]);
     }

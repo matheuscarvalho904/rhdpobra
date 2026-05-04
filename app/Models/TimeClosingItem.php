@@ -10,40 +10,25 @@ class TimeClosingItem extends Model
     protected $fillable = [
         'time_closing_id',
         'employee_id',
-        'expected_minutes',
-        'worked_minutes',
-        'overtime_50_minutes',
-        'overtime_100_minutes',
-        'lateness_minutes',
-        'absence_minutes',
-        'night_minutes',
-        'hour_bank_credit_minutes',
-        'hour_bank_debit_minutes',
-        'dsr_minutes',
+        'worked_hours',
+        'expected_hours',
+        'overtime_hours',
+        'delay_hours',
+        'absence_days',
+        'entries_count',
+        'days_with_entries',
+        'status',
         'notes',
+        'daily_summary',
     ];
 
-    protected function casts(): array
-    {
-        return [
-            'time_closing_id' => 'integer',
-            'employee_id' => 'integer',
-            'expected_minutes' => 'integer',
-            'worked_minutes' => 'integer',
-            'overtime_50_minutes' => 'integer',
-            'overtime_100_minutes' => 'integer',
-            'lateness_minutes' => 'integer',
-            'absence_minutes' => 'integer',
-            'night_minutes' => 'integer',
-            'hour_bank_credit_minutes' => 'integer',
-            'hour_bank_debit_minutes' => 'integer',
-            'dsr_minutes' => 'integer',
-        ];
-    }
+    protected $casts = [
+        'daily_summary' => 'array',
+    ];
 
-    public function timeClosing(): BelongsTo
+    public function closing(): BelongsTo
     {
-        return $this->belongsTo(TimeClosing::class);
+        return $this->belongsTo(TimeClosing::class, 'time_closing_id');
     }
 
     public function employee(): BelongsTo

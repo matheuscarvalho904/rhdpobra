@@ -24,7 +24,7 @@ class TimeClosingResource extends Resource
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-calendar-days';
     protected static string|UnitEnum|null $navigationGroup = 'Ponto';
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 11;
 
     public static function form(Schema $schema): Schema
     {

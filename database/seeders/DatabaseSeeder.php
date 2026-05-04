@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Spatie\Permission\PermissionRegistrar;
+use Database\Seeders\WorkScheduleSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,6 +17,8 @@ class DatabaseSeeder extends Seeder
             PermissionSeeder::class,
             RolePermissionSeeder::class,
             AdminUserSeeder::class,
+            WorkScheduleSeeder::class,
+
 
             CompanySeeder::class,
             BranchSeeder::class,
@@ -53,6 +56,7 @@ class DatabaseSeeder extends Seeder
             PayrollEventSeeder::class,
 
             DemoStructureSeeder::class,
+            
         ]);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();

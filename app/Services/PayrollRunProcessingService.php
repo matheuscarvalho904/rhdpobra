@@ -16,6 +16,10 @@ class PayrollRunProcessingService
 
     public function process(PayrollRun $payrollRun): void
     {
+        if ($payrollRun->status === 'closed') {
+            throw new \RuntimeException('Folha já fechada. Não é permitido reprocessar.');
+        }
+
         DB::transaction(function () use ($payrollRun) {
             $this->clearPreviousProcessing($payrollRun);
 
@@ -62,6 +66,10 @@ class PayrollRunProcessingService
 
     public function reprocess(PayrollRun $payrollRun): void
     {
+        if ($payrollRun->status === 'closed') {
+            throw new \RuntimeException('Folha já fechada. Não é permitido reprocessar.');
+        }
+
         $payrollRun->update([
             'status' => 'processing',
             'error_message' => null,
@@ -122,7 +130,16 @@ class PayrollRunProcessingService
                 'competency_year' => $competency?->year,
                 'dependents' => (int) ($employee->dependents_count ?? 0),
 
+                'admission_date' => optional($contract->admission_date)->format('Y-m-d')
+                    ?? optional($contract->hire_date)->format('Y-m-d')
+                    ?? optional($employee->admission_date)->format('Y-m-d')
+                    ?? optional($employee->hire_date)->format('Y-m-d'),
+
+                'termination_date' => optional($contract->termination_date)->format('Y-m-d')
+                    ?? optional($employee->termination_date)->format('Y-m-d'),
+
                 'salary_divisor_mode' => 'fixed_30',
+                'salary_divisor_days' => 30,
                 'prorate_salary_on_admission' => true,
             ]
         );
@@ -244,6 +261,13 @@ class PayrollRunProcessingService
 
     protected function getEmployees(PayrollRun $payrollRun): Collection
     {
+        $competency = $payrollRun->payrollCompetency;
+
+        $periodEnd = $competency?->period_end
+            ?? ($competency && $competency->month && $competency->year
+                ? now()->setDate((int) $competency->year, (int) $competency->month, 1)->endOfMonth()
+                : null);
+
         return Employee::query()
             ->with([
                 'company',
@@ -254,13 +278,20 @@ class PayrollRunProcessingService
                 'currentContract',
             ])
             ->where('is_active', true)
-            ->whereHas('currentContract', function ($query) use ($payrollRun) {
+            ->whereHas('currentContract', function ($query) use ($payrollRun, $periodEnd) {
                 $query
                     ->where('is_current', true)
                     ->whereIn('status', ['ativo', 'em_aviso'])
                     ->when($payrollRun->company_id, fn ($q) => $q->where('company_id', $payrollRun->company_id))
                     ->when($payrollRun->branch_id, fn ($q) => $q->where('branch_id', $payrollRun->branch_id))
-                    ->when($payrollRun->work_id, fn ($q) => $q->where('work_id', $payrollRun->work_id));
+                    ->when($payrollRun->work_id, fn ($q) => $q->where('work_id', $payrollRun->work_id))
+                    ->when($periodEnd, function ($q) use ($periodEnd) {
+                        $q->where(function ($sub) use ($periodEnd) {
+                            $sub
+                                ->whereNull('admission_date')
+                                ->orWhereDate('admission_date', '<=', $periodEnd->toDateString());
+                        });
+                    });
             })
             ->where(function ($query) use ($payrollRun) {
                 match ($payrollRun->run_type) {
@@ -309,23 +340,35 @@ class PayrollRunProcessingService
 
     protected function normalizeCalculationResult(array $result): array
     {
-        $grossAmount = $this->money(abs((float) ($result['gross_amount'] ?? 0)));
         $fgtsAmount = $this->money(abs((float) ($result['fgts_amount'] ?? 0)));
-        $salaryAdvanceDiscount = $this->money(abs((float) ($result['salary_advance_discount'] ?? 0)));
-        $eventDiscounts = $this->money(abs((float) ($result['event_discounts_total'] ?? 0)));
-        $inssAmount = $this->money(abs((float) ($result['inss_amount'] ?? 0)));
-        $irrfAmount = $this->money(abs((float) ($result['irrf_amount'] ?? 0)));
 
-        $totalDiscounts = $this->money(
-            abs((float) ($result['total_discounts'] ?? (
-                $eventDiscounts
-                + $salaryAdvanceDiscount
-                + $inssAmount
-                + $irrfAmount
-            )))
-        );
+        $items = is_array($result['items'] ?? null)
+            ? array_values($result['items'])
+            : [];
 
-        $netAmount = $this->money((float) ($result['net_amount'] ?? ($grossAmount - $totalDiscounts)));
+        $totalEarnings = 0.0;
+        $totalDiscounts = 0.0;
+
+        foreach ($items as $item) {
+            $amount = abs((float) ($item['amount'] ?? 0));
+            $type = $this->normalizeItemType($item['type'] ?? null);
+
+            if ($amount <= 0 || $type === null) {
+                continue;
+            }
+
+            if ($type === 'provento') {
+                $totalEarnings += $amount;
+            }
+
+            if ($type === 'desconto') {
+                $totalDiscounts += $amount;
+            }
+        }
+
+        $grossAmount = $this->money($totalEarnings);
+        $totalDiscounts = $this->money($totalDiscounts);
+        $netAmount = $this->money($grossAmount - $totalDiscounts);
 
         if ($netAmount < 0) {
             $netAmount = 0.0;
@@ -333,13 +376,13 @@ class PayrollRunProcessingService
 
         $result['gross_amount'] = $grossAmount;
         $result['fgts_amount'] = $fgtsAmount;
-        $result['salary_advance_discount'] = $salaryAdvanceDiscount;
-        $result['event_discounts_total'] = $eventDiscounts;
-        $result['inss_amount'] = $inssAmount;
-        $result['irrf_amount'] = $irrfAmount;
+        $result['salary_advance_discount'] = $this->money(abs((float) ($result['salary_advance_discount'] ?? 0)));
+        $result['event_discounts_total'] = $this->money(abs((float) ($result['event_discounts_total'] ?? 0)));
+        $result['inss_amount'] = $this->money(abs((float) ($result['inss_amount'] ?? 0)));
+        $result['irrf_amount'] = $this->money(abs((float) ($result['irrf_amount'] ?? 0)));
         $result['total_discounts'] = $totalDiscounts;
         $result['net_amount'] = $netAmount;
-        $result['items'] = is_array($result['items'] ?? null) ? array_values($result['items']) : [];
+        $result['items'] = $items;
 
         return $result;
     }

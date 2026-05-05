@@ -19,8 +19,7 @@ return new class extends Migration
     $table->unsignedBigInteger('size')->nullable();
 
     // 🔥 IMPORTANTE
-    $table->longText('message')->charset('utf8mb4')->collation('utf8mb4_unicode_ci')->nullable();
-
+    $table->text('message')->nullable();
     $table->timestamp('started_at')->nullable();
     $table->timestamp('finished_at')->nullable();
 

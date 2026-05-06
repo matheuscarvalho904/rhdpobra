@@ -155,6 +155,18 @@ class PayrollEventSeeder extends Seeder
                 'description' => 'Desconto por atraso.',
             ],
             [
+                'code' => 'DSR_FALTA',
+                'name' => 'DSR perdido por falta',
+                'type' => 'deduction',
+                'incidence_type' => 'absence',
+                'calculation_type' => 'automatic',
+                'affects_inss' => false,
+                'affects_fgts' => false,
+                'affects_irrf' => false,
+                'affects_net' => true,
+                'description' => 'Desconto de DSR perdido em razão de falta injustificada.',
+            ],
+            [
                 'code' => 'INSS',
                 'name' => 'INSS',
                 'type' => 'deduction',

@@ -69,4 +69,8 @@ public function epiDeliveries(): HasMany
 {
     return $this->hasMany(EmployeeEpiDelivery::class);
 }
+public function timeBankSetting()
+{
+    return $this->hasOne(CompanyTimeBankSetting::class);
+}
 }

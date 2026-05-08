@@ -593,5 +593,14 @@ public function workSchedules()
 {
     return $this->hasMany(\App\Models\EmployeeWorkSchedule::class);
 }
+public function timeBank()
+{
+    return $this->hasOne(TimeBank::class);
+}
+
+public function timeBankSetting()
+{
+    return $this->hasOne(EmployeeTimeBankSetting::class);
+}
 
 }

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\CompanyTimeBankSetting;
 use App\Models\Employee;
+use App\Models\EmployeeTimeBankSetting;
 use App\Models\EmployeeVariableEvent;
 use App\Models\Holiday;
 use App\Models\TimeClosing;
@@ -12,6 +14,10 @@ use Carbon\CarbonPeriod;
 
 class TimeClosingToPayrollService
 {
+    public function __construct(
+        protected TimeBankService $timeBankService,
+    ) {}
+
     public function generate(TimeClosing $closing, ?int $payrollCompetencyId = null): void
     {
         $closing->loadMissing(['items.employee.currentContract']);
@@ -23,6 +29,7 @@ class TimeClosingToPayrollService
         }
 
         $this->clearPreviousEvents($closing, $payrollCompetencyId);
+        $this->timeBankService->clearClosingMovements($closing);
 
         $events = $this->resolvePayrollEvents($closing->company_id);
 
@@ -31,35 +38,65 @@ class TimeClosingToPayrollService
                 continue;
             }
 
-            $split = $this->splitOvertimeBySchedule($item->employee, $item);
+            $employee = $item->employee;
+            $settings = $this->resolveTimeBankSettings($employee);
+            $split = $this->splitOvertimeBySchedule($employee, $item);
 
             $amount50 = 0.0;
             $amount100 = 0.0;
+            $payrollHours50 = $split['hours_50'];
+            $payrollHours100 = $split['hours_100'];
 
-            if ($split['hours_50'] > 0 && $events['overtime_50']) {
-                $amount50 = $this->calculateOvertime50($item, $split['hours_50']);
+            if ($settings['enabled'] && $split['hours_50'] > 0) {
+                $result50 = $this->timeBankService->applyOvertime(
+                    employee: $employee,
+                    overtimeHours: $split['hours_50'],
+                    destination: $settings['destination'],
+                    monthlyLimit: $settings['monthly_limit'],
+                    excessToPayroll: $settings['excess_to_payroll'],
+                    closing: $closing,
+                );
+
+                $payrollHours50 = (float) $result50['payroll_hours'];
+            }
+
+            if ($settings['enabled'] && $split['hours_100'] > 0) {
+                $result100 = $this->timeBankService->applyOvertime(
+                    employee: $employee,
+                    overtimeHours: $split['hours_100'],
+                    destination: $settings['destination'],
+                    monthlyLimit: $settings['monthly_limit'],
+                    excessToPayroll: $settings['excess_to_payroll'],
+                    closing: $closing,
+                );
+
+                $payrollHours100 = (float) $result100['payroll_hours'];
+            }
+
+            if ($payrollHours50 > 0 && $events['overtime_50']) {
+                $amount50 = $this->calculateOvertime50($item, $payrollHours50);
 
                 $this->upsertVariableEvent(
                     employeeId: $item->employee_id,
                     payrollEventId: $events['overtime_50'],
                     payrollCompetencyId: $payrollCompetencyId,
                     amount: $amount50,
-                    quantity: $split['hours_50'],
-                    reference: $split['hours_50'],
+                    quantity: $payrollHours50,
+                    reference: $payrollHours50,
                     notes: "Gerado pelo fechamento de ponto #{$closing->id} - Hora Extra 50%."
                 );
             }
 
-            if ($split['hours_100'] > 0 && $events['overtime_100']) {
-                $amount100 = $this->calculateOvertime100($item, $split['hours_100']);
+            if ($payrollHours100 > 0 && $events['overtime_100']) {
+                $amount100 = $this->calculateOvertime100($item, $payrollHours100);
 
                 $this->upsertVariableEvent(
                     employeeId: $item->employee_id,
                     payrollEventId: $events['overtime_100'],
                     payrollCompetencyId: $payrollCompetencyId,
                     amount: $amount100,
-                    quantity: $split['hours_100'],
-                    reference: $split['hours_100'],
+                    quantity: $payrollHours100,
+                    reference: $payrollHours100,
                     notes: "Gerado pelo fechamento de ponto #{$closing->id} - Hora Extra 100%."
                 );
             }
@@ -71,8 +108,20 @@ class TimeClosingToPayrollService
                     payrollEventId: $events['dsr_overtime'],
                     payrollCompetencyId: $payrollCompetencyId,
                     overtimeAmount: $amount50 + $amount100,
-                    overtimeHours: $split['hours_50'] + $split['hours_100'],
+                    overtimeHours: $payrollHours50 + $payrollHours100,
                 );
+            }
+
+            $delayHours = (float) $item->delay_hours;
+
+            if ($settings['enabled'] && $settings['compensate_delays'] && $delayHours > 0) {
+                $compensation = $this->timeBankService->compensateDelay(
+                    employee: $employee,
+                    delayHours: $delayHours,
+                    closing: $closing,
+                );
+
+                $delayHours = (float) $compensation['remaining_hours'];
             }
 
             if ((float) $item->absence_days > 0 && $events['absence']) {
@@ -89,16 +138,16 @@ class TimeClosingToPayrollService
                 );
             }
 
-            if ((float) $item->delay_hours > 0 && $events['delay']) {
-                $delayAmount = $this->calculateDelay($item, (float) $item->delay_hours);
+            if ($delayHours > 0 && $events['delay']) {
+                $delayAmount = $this->calculateDelay($item, $delayHours);
 
                 $this->upsertVariableEvent(
                     employeeId: $item->employee_id,
                     payrollEventId: $events['delay'],
                     payrollCompetencyId: $payrollCompetencyId,
                     amount: -$delayAmount,
-                    quantity: (float) $item->delay_hours,
-                    reference: (float) $item->delay_hours,
+                    quantity: $delayHours,
+                    reference: $delayHours,
                     notes: "Gerado pelo fechamento de ponto #{$closing->id} - Atraso."
                 );
             }
@@ -123,15 +172,51 @@ class TimeClosingToPayrollService
         }
     }
 
+    protected function resolveTimeBankSettings(Employee $employee): array
+    {
+        $employeeSetting = EmployeeTimeBankSetting::query()
+            ->where('employee_id', $employee->id)
+            ->first();
+
+        if ($employeeSetting && ! $employeeSetting->use_company_rules) {
+            return [
+                'enabled' => (bool) $employeeSetting->time_bank_enabled,
+                'destination' => $employeeSetting->overtime_destination ?: 'payroll',
+                'monthly_limit' => (float) $employeeSetting->monthly_bank_limit,
+                'excess_to_payroll' => (bool) $employeeSetting->excess_to_payroll,
+                'compensate_delays' => (bool) $employeeSetting->compensate_delays_with_balance,
+            ];
+        }
+
+        $companySetting = CompanyTimeBankSetting::query()
+            ->where('company_id', $employee->company_id)
+            ->first();
+
+        if (! $companySetting) {
+            return [
+                'enabled' => false,
+                'destination' => 'payroll',
+                'monthly_limit' => 0,
+                'excess_to_payroll' => true,
+                'compensate_delays' => false,
+            ];
+        }
+
+        return [
+            'enabled' => (bool) $companySetting->enabled,
+            'destination' => $companySetting->default_overtime_destination ?: 'payroll',
+            'monthly_limit' => (float) $companySetting->monthly_bank_limit,
+            'excess_to_payroll' => (bool) $companySetting->excess_to_payroll,
+            'compensate_delays' => (bool) $companySetting->compensate_delays_with_balance,
+        ];
+    }
+
     protected function splitOvertimeBySchedule(Employee $employee, $item): array
     {
         $itemTotal = round((float) $item->overtime_hours, 2);
 
         if ($itemTotal <= 0) {
-            return [
-                'hours_50' => 0.0,
-                'hours_100' => 0.0,
-            ];
+            return ['hours_50' => 0.0, 'hours_100' => 0.0];
         }
 
         $hours50 = 0.0;
@@ -229,20 +314,19 @@ class TimeClosingToPayrollService
     }
 
     protected function calculateDsrLostDays($item): float
-{
-    $hasAbsence = collect($item->daily_summary)
-        ->filter(function ($day) {
-            return ($day['date'] ?? null) !== 'TOTAL'
-                && !$day['is_sunday']
-                && !$day['is_saturday']
-                && !$day['is_holiday']
-                && (float) ($day['absence_days'] ?? 0) > 0;
-        })
-        ->isNotEmpty();
+    {
+        $hasAbsence = collect($item->daily_summary ?? [])
+            ->filter(function ($day) {
+                return ($day['date'] ?? null) !== 'TOTAL'
+                    && ! (bool) ($day['is_sunday'] ?? false)
+                    && ! (bool) ($day['is_saturday'] ?? false)
+                    && ! (bool) ($day['is_holiday'] ?? false)
+                    && (float) ($day['absence_days'] ?? 0) > 0;
+            })
+            ->isNotEmpty();
 
-    // 🔥 REGRA CORRETA
-    return $hasAbsence ? 1.0 : 0.0;
-}
+        return $hasAbsence ? 1.0 : 0.0;
+    }
 
     protected function countDsrCalendarDays(TimeClosing $closing): array
     {

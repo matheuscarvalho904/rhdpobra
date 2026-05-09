@@ -1,3 +1,7 @@
 <x-filament-panels::page>
-    {{-- Page content --}}
+
+    <x-filament::section>
+        {{ $this->form }}
+    </x-filament::section>
+
 </x-filament-panels::page>

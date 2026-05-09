@@ -10,13 +10,17 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Schema;
 use UnitEnum;
 
-class TimeBankAdjustment extends Page
+class TimeBankAdjustment extends Page implements HasForms
 {
+    use InteractsWithForms;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-pencil-square';
 
     protected static string|UnitEnum|null $navigationGroup = 'Ponto e Jornada';
@@ -40,6 +44,11 @@ class TimeBankAdjustment extends Page
     public function mount(): void
     {
         $this->movement_date = now()->toDateString();
+
+        $this->form->fill([
+            'type' => 'credit',
+            'movement_date' => now()->toDateString(),
+        ]);
     }
 
     protected function getHeaderActions(): array
@@ -50,22 +59,18 @@ class TimeBankAdjustment extends Page
                 ->color('success')
                 ->action(function (): void {
 
-                    $this->validate([
-                        'employee_id' => ['required'],
-                        'type' => ['required'],
-                        'hours' => ['required', 'numeric', 'min:0.01'],
-                    ]);
+                    $data = $this->form->getState();
 
-                    $employee = Employee::findOrFail($this->employee_id);
+                    $employee = Employee::findOrFail($data['employee_id']);
 
                     $service = app(TimeBankService::class);
 
-                    if ($this->type === 'credit') {
+                    if ($data['type'] === 'credit') {
 
                         $service->credit(
                             employee: $employee,
-                            hours: (float) $this->hours,
-                            description: $this->description ?: 'Crédito manual de banco de horas.',
+                            hours: (float) $data['hours'],
+                            description: $data['description'] ?: 'Crédito manual de banco de horas.',
                             metadata: [
                                 'source' => 'manual_adjustment',
                             ]
@@ -74,8 +79,8 @@ class TimeBankAdjustment extends Page
 
                         $service->debit(
                             employee: $employee,
-                            hours: (float) $this->hours,
-                            description: $this->description ?: 'Débito manual de banco de horas.',
+                            hours: (float) $data['hours'],
+                            description: $data['description'] ?: 'Débito manual de banco de horas.',
                             metadata: [
                                 'source' => 'manual_adjustment',
                             ]
@@ -87,15 +92,10 @@ class TimeBankAdjustment extends Page
                         ->success()
                         ->send();
 
-                    $this->reset([
-                        'employee_id',
-                        'hours',
-                        'description',
+                    $this->form->fill([
+                        'type' => 'credit',
+                        'movement_date' => now()->toDateString(),
                     ]);
-
-                    $this->type = 'credit';
-
-                    $this->movement_date = now()->toDateString();
                 }),
         ];
     }
@@ -128,7 +128,8 @@ class TimeBankAdjustment extends Page
                     ->suffix(' h'),
 
                 DatePicker::make('movement_date')
-                    ->label('Data'),
+                    ->label('Data')
+                    ->required(),
 
                 Textarea::make('description')
                     ->label('Descrição')

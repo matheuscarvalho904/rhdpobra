@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources\TimeBanks;
 
+use App\Filament\Pages\TimeBankAdjustment;
 use App\Filament\Resources\TimeBanks\Pages\ListTimeBanks;
 use App\Filament\Resources\TimeBanks\Pages\ViewTimeBank;
 use App\Filament\Resources\TimeBanks\RelationManagers\MovementsRelationManager;
 use App\Models\TimeBank;
+use Filament\Actions\Action;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -20,15 +22,15 @@ class TimeBankResource extends Resource
 
     protected static ?string $navigationLabel = 'Banco de Horas';
 
-protected static ?string $modelLabel = 'Banco de Horas';
+    protected static ?string $modelLabel = 'Banco de Horas';
 
-protected static ?string $pluralModelLabel = 'Banco de Horas';
+    protected static ?string $pluralModelLabel = 'Banco de Horas';
 
-protected static string|\UnitEnum|null $navigationGroup = 'Ponto e Jornada';
+    protected static string|\UnitEnum|null $navigationGroup = 'Ponto e Jornada';
 
-protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-clock';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-clock';
 
-protected static ?int $navigationSort = 40;
+    protected static ?int $navigationSort = 40;
 
     public static function form(Schema $schema): Schema
     {
@@ -39,6 +41,7 @@ protected static ?int $navigationSort = 40;
     {
         return $table
             ->columns([
+
                 TextColumn::make('employee.name')
                     ->label('Colaborador')
                     ->searchable()
@@ -53,13 +56,17 @@ protected static ?int $navigationSort = 40;
                     ->label('Horas Positivas')
                     ->numeric(decimalPlaces: 2)
                     ->sortable()
-                    ->suffix(' h'),
+                    ->suffix(' h')
+                    ->badge()
+                    ->color('success'),
 
                 TextColumn::make('negative_balance_hours')
                     ->label('Horas Negativas')
                     ->numeric(decimalPlaces: 2)
                     ->sortable()
-                    ->suffix(' h'),
+                    ->suffix(' h')
+                    ->badge()
+                    ->color('danger'),
 
                 TextColumn::make('net_balance_hours')
                     ->label('Saldo')
@@ -88,6 +95,7 @@ protected static ?int $navigationSort = 40;
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+
             ->filters([
                 SelectFilter::make('company_id')
                     ->label('Empresa')
@@ -102,10 +110,28 @@ protected static ?int $navigationSort = 40;
                         0 => 'Inativo',
                     ]),
             ])
+
             ->recordActions([
+
                 ViewAction::make()
-                    ->label('Ver Extrato'),
+                    ->label('Extrato'),
+
+                Action::make('adjust')
+                    ->label('Ajustar')
+                    ->icon('heroicon-o-pencil-square')
+                    ->color('warning')
+                    ->url(fn () => TimeBankAdjustment::getUrl()),
+
+                Action::make('employee')
+                    ->label('Colaborador')
+                    ->icon('heroicon-o-user')
+                    ->color('info')
+                    ->url(fn (TimeBank $record) =>
+                        "/app/employees/{$record->employee_id}/edit"
+                    ),
+
             ])
+
             ->defaultSort('net_balance_hours', 'desc');
     }
 

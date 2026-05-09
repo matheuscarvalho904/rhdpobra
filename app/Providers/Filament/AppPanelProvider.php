@@ -42,6 +42,8 @@ class AppPanelProvider extends PanelProvider
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->widgets([
                 BirthdaysThisMonthWidget::class,
+                \App\Filament\Widgets\TimeBankOverview::class,
+                \App\Filament\Widgets\TimeBankRanking::class,
             ])
             ->middleware([
                 EncryptCookies::class,

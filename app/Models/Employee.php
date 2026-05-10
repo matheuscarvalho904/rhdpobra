@@ -227,41 +227,84 @@ class Employee extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (Employee $employee) {
-            if (! $employee->company_id && Auth::user()?->company_id) {
-                $employee->company_id = Auth::user()->company_id;
-            }
+    static::creating(function (Employee $employee) {
 
-            if (blank($employee->code)) {
-                $employee->code = static::generateNextCode($employee->company_id);
-            }
+        if (! $employee->company_id && Auth::user()?->company_id) {
+            $employee->company_id = Auth::user()->company_id;
+        }
 
-            $employee->applyContractRules();
-            $employee->normalizeServiceContractTermDates();
+        if (blank($employee->code)) {
+            $employee->code = static::generateNextCode($employee->company_id);
+        }
 
-            if (! $employee->created_by && Auth::id()) {
-                $employee->created_by = Auth::id();
-            }
+        /*
+        |--------------------------------------------------------------------------
+        | SEMPRE aplica regras
+        |--------------------------------------------------------------------------
+        */
+        $employee->applyContractRules();
 
-            if (! $employee->updated_by && Auth::id()) {
-                $employee->updated_by = Auth::id();
-            }
-        });
+        /*
+        |--------------------------------------------------------------------------
+        | Normaliza datas
+        |--------------------------------------------------------------------------
+        */
+        $employee->normalizeServiceContractTermDates();
 
-        static::updating(function (Employee $employee) {
-            if ($employee->isDirty('contract_type_id')) {
-                $employee->applyContractRules();
-            }
+        /*
+        |--------------------------------------------------------------------------
+        | Datas de experiência
+        |--------------------------------------------------------------------------
+        */
+        if (
+            $employee->has_experience_period
+            && ! $employee->experience_start_date
+        ) {
+            $employee->experience_start_date = $employee->admission_date;
+        }
 
-            if ($employee->isDirty(['admission_date', 'contract_term_type', 'contract_term_days', 'contract_start_date'])) {
-                $employee->normalizeServiceContractTermDates();
-            }
+        if (! $employee->created_by && Auth::id()) {
+            $employee->created_by = Auth::id();
+        }
 
-            if (Auth::id()) {
-                $employee->updated_by = Auth::id();
-            }
-        });
-    }
+        if (! $employee->updated_by && Auth::id()) {
+            $employee->updated_by = Auth::id();
+        }
+    });
+
+    static::updating(function (Employee $employee) {
+
+        /*
+        |--------------------------------------------------------------------------
+        | SEMPRE aplica regras
+        |--------------------------------------------------------------------------
+        */
+        $employee->applyContractRules();
+
+        /*
+        |--------------------------------------------------------------------------
+        | SEMPRE recalcula datas
+        |--------------------------------------------------------------------------
+        */
+        $employee->normalizeServiceContractTermDates();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Atualiza experiência
+        |--------------------------------------------------------------------------
+        */
+        if (
+            $employee->has_experience_period
+            && ! $employee->experience_start_date
+        ) {
+            $employee->experience_start_date = $employee->admission_date;
+        }
+
+        if (Auth::id()) {
+            $employee->updated_by = Auth::id();
+        }
+    });
+}
 
     public static function generateNextCode(?int $companyId = null): string
     {

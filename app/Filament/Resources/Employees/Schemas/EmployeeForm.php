@@ -606,30 +606,79 @@ class EmployeeForm
                                         ]),
 
                                     Select::make('contract_type_id')
-                                    ->label('Tipo de Contrato')
-                                    ->options(fn () => ContractType::query()
-                                        ->where('is_active', true)
-                                        ->orderBy('sort_order')
-                                        ->orderBy('name')
-                                        ->pluck('name', 'id')
-                                        ->toArray())
-                                    ->searchable()
-                                    ->preload()
-                                    ->required()
-                                    ->native(false)
-                                    ->live()
-                                    ->columnSpan([
-                                        'default' => 1,
-                                        'md' => 2,
-                                        'xl' => 3,
-                                    ])
-                                    ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
-                                        self::applyContractProcessingRules(
-                                            $state ? (int) $state : null,
-                                            $set,
-                                            $get
-                                        );
-                                    }),
+                                        ->label('Tipo de Contrato')
+                                        ->options(fn () => ContractType::query()
+                                            ->where('is_active', true)
+                                            ->orderBy('sort_order')
+                                            ->orderBy('name')
+                                            ->pluck('name', 'id')
+                                            ->toArray())
+                                        ->searchable()
+                                        ->preload()
+                                        ->required()
+                                        ->native(false)
+                                        ->live()
+                                        ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 2,
+                                            'xl' => 3,
+                                        ])
+                                        ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
+                                            $rules = ContractProcessingRuleService::getByContractTypeId(
+                                                $state ? (int) $state : null
+                                            );
+
+                                            $hasFgts = (bool) ($rules['has_fgts'] ?? false);
+                                            $hasInss = (bool) ($rules['has_inss'] ?? true);
+
+                                            $set('processing_type', $rules['processing_type'] ?? 'payroll');
+                                            $set('generates_payroll', (bool) ($rules['generates_payroll'] ?? true));
+                                            $set('generates_accounts_payable', (bool) ($rules['generates_accounts_payable'] ?? false));
+                                            $set('allows_payslip', (bool) ($rules['allows_payslip'] ?? true));
+
+                                            $set('has_fgts', $hasFgts);
+                                            $set('fgts_rate', $hasFgts ? (float) ($rules['fgts_rate'] ?? 8) : 0);
+
+                                            $set('has_inss', $hasInss);
+                                            $set('inss_optional', (bool) ($rules['inss_optional'] ?? false));
+                                            $set('with_inss', $hasInss ? (bool) ($rules['with_inss'] ?? true) : false);
+
+                                            $set('has_irrf', (bool) ($rules['has_irrf'] ?? true));
+
+                                            if (self::isServiceContract($state ? (int) $state : null)) {
+                                                if (! $get('contract_term_type')) {
+                                                    $set('contract_term_type', 'indeterminate');
+                                                }
+
+                                                if (! $get('contract_start_date') && $get('admission_date')) {
+                                                    $set('contract_start_date', $get('admission_date'));
+                                                }
+
+                                                self::recalculateServiceContractDates($set, $get);
+                                            } else {
+                                                $set('contract_term_type', null);
+                                                $set('contract_term_days', null);
+                                                $set('contract_start_date', null);
+                                                $set('contract_end_date', null);
+                                            }
+
+                                            if (! self::isCltContract($state ? (int) $state : null)) {
+                                                $set('has_experience_period', false);
+                                                $set('experience_model', null);
+                                                $set('experience_days_first', null);
+                                                $set('experience_days_second', null);
+                                                $set('experience_total_days', null);
+                                                $set('experience_start_date', null);
+                                                $set('experience_end_date', null);
+                                            } elseif ($get('has_experience_period')) {
+                                                if (! $get('experience_start_date') && $get('admission_date')) {
+                                                    $set('experience_start_date', $get('admission_date'));
+                                                }
+
+                                                self::applyExperienceModel($set, $get, $get('experience_model'));
+                                            }
+                                        }),
+
                                     Section::make('Contrato PF / PJ')
                                         ->description('Controle de prazo para contratos PF, PJ, autônomo e RPA, com início pela admissão e término calculado automaticamente.')
                                         ->columns([

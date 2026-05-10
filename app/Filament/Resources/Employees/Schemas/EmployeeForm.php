@@ -623,15 +623,6 @@ class EmployeeForm
                                         'md' => 2,
                                         'xl' => 3,
                                     ])
-                                    ->afterStateHydrated(function (?string $state, Set $set, Get $get): void {
-                                        if ($state) {
-                                            self::applyContractProcessingRules(
-                                                (int) $state,
-                                                $set,
-                                                $get
-                                            );
-                                        }
-                                    })
                                     ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
                                         self::applyContractProcessingRules(
                                             $state ? (int) $state : null,

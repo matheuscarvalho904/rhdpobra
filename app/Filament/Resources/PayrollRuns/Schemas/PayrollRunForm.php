@@ -38,22 +38,41 @@ class PayrollRunForm
                         ->live()
                         ->columnSpan(12)
                         ->afterStateUpdated(function (?string $state, Set $set, Get $get): void {
-                            if (blank($state)) {
-                                return;
+
+                        if (blank($state)) {
+                            return;
+                        }
+
+                        $competency = PayrollCompetency::query()->find($state);
+
+                        if (! $competency) {
+                            return;
+                        }
+
+                        if (blank(request()->route('record'))) {
+
+                            $runTypeLabel = self::runTypeOptions()[$get('run_type') ?? 'payroll_clt']
+                                ?? 'Folha';
+
+                            $description = $runTypeLabel
+                                . ' - '
+                                . $competency->display_name;
+
+                            if ($get('work_id')) {
+
+                                $work = Work::find($get('work_id'));
+
+                                if ($work) {
+                                    $description .= ' - Obra: ' . $work->name;
+                                }
+                            } else {
+
+                                $description .= ' - Empresa Completa';
                             }
 
-                            $competency = PayrollCompetency::query()->find($state);
-
-                            if (! $competency) {
-                                return;
-                            }
-
-                            if (blank(request()->route('record'))) {
-                                $runTypeLabel = self::runTypeOptions()[$get('run_type') ?? 'payroll_clt'] ?? 'Folha';
-
-                                $set('description', $runTypeLabel . ' - ' . $competency->display_name);
-                            }
-                        }),
+                            $set('description', $description);
+                        }
+                    }),
 
                     Select::make('run_type')
                         ->label('Tipo de Processamento')
@@ -126,17 +145,24 @@ class PayrollRunForm
                         }),
 
                     Select::make('work_id')
-                        ->label('Obra')
-                        ->options(fn (Get $get) => Work::query()
-                            ->when($get('company_id'), fn ($query, $companyId) => $query->where('company_id', $companyId))
-                            ->when($get('branch_id'), fn ($query, $branchId) => $query->where('branch_id', $branchId))
-                            ->orderBy('name')
-                            ->pluck('name', 'id')
-                            ->toArray())
-                        ->searchable()
-                        ->preload()
-                        ->columnSpan(12),
-
+                    ->label('Obra (Opcional)')
+                    ->helperText('Preencha apenas se desejar processar a folha de uma obra específica.')
+                    ->options(fn (Get $get) => Work::query()
+                        ->when(
+                            $get('company_id'),
+                            fn ($query, $companyId) => $query->where('company_id', $companyId)
+                        )
+                        ->when(
+                            $get('branch_id'),
+                            fn ($query, $branchId) => $query->where('branch_id', $branchId)
+                        )
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->toArray())
+                    ->searchable()
+                    ->preload()
+                    ->nullable()
+                    ->columnSpan(12),
                     TextInput::make('description')
                         ->label('Descrição')
                         ->required()

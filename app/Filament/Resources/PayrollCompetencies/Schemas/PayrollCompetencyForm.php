@@ -22,13 +22,7 @@ class PayrollCompetencyForm
     {
         return $schema->components([
             Section::make('Dados da Competência')
-                ->columns([
-                    'default' => 1,
-                    'sm' => 2,
-                    'md' => 2,
-                    'lg' => 3,
-                    'xl' => 4,
-                ])
+                ->columns(1)
                 ->schema([
 
                     Select::make('company_id')
@@ -44,11 +38,7 @@ class PayrollCompetencyForm
                         ->required()
                         ->default(fn () => Auth::user()?->company_id)
                         ->live()
-                        ->columnSpan([
-                            'default' => 1,
-                            'lg' => 1,
-                            'xl' => 1,
-                        ])
+                        ->columnSpanFull()
                         ->afterStateUpdated(function (Set $set): void {
                             $set('branch_id', null);
                         }),
@@ -67,11 +57,7 @@ class PayrollCompetencyForm
                         ->searchable()
                         ->preload()
                         ->native(false)
-                        ->columnSpan([
-                            'default' => 1,
-                            'lg' => 1,
-                            'xl' => 1,
-                        ]),
+                        ->columnSpanFull(),
 
                     Select::make('type')
                         ->label('Tipo')
@@ -86,11 +72,7 @@ class PayrollCompetencyForm
                         ->required()
                         ->native(false)
                         ->live()
-                        ->columnSpan([
-                            'default' => 1,
-                            'lg' => 1,
-                            'xl' => 1,
-                        ])
+                        ->columnSpanFull()
                         ->afterStateUpdated(function (Get $get, Set $set): void {
                             self::updateDescription($get, $set);
                         }),

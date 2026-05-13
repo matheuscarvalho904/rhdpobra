@@ -523,6 +523,11 @@ class EmployeeForm
                                     ->displayFormat('d/m/Y')
                                     ->format('Y-m-d')
                                     ->live()
+                                    ->columnSpan([
+                                            'default' => 1,
+                                            'md' => 3,
+                                            'xl' => 2,
+                                        ])
                                     ->dehydrateStateUsing(fn ($state) => self::normalizeDate($state))
                                     ->afterStateUpdated(function (Set $set, Get $get, $state): void {
                                         $date = self::normalizeDate($state);
@@ -546,6 +551,8 @@ class EmployeeForm
                                         if ($get('has_experience_period')) {
                                             self::recalculateExperienceDates($set, $get);
                                         }
+                                        
+    
                                     }),
 
                                     DatePicker::make('termination_date')

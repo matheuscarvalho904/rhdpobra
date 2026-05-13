@@ -34,6 +34,7 @@ class EmployeeContractDocumentService
         $template = match ($contractKind) {
             'clt_experience' => 'pdf.contracts.contract-clt-experience',
             'clt' => 'pdf.contracts.contract-clt',
+            'aprendiz' => 'pdf.contracts.contract-aprendiz',
             'pf' => 'pdf.contracts.contract-pf',
             'pj' => 'pdf.contracts.contract-pj',
             'estagio' => 'pdf.contracts.contract-estagio',
@@ -86,6 +87,14 @@ class EmployeeContractDocumentService
     protected function resolveContractKind(Employee $employee): string
     {
         $name = mb_strtolower(trim((string) ($employee->contractType?->name ?? '')));
+
+        if (
+            str_contains($name, 'aprendiz')
+            || str_contains($name, 'aprendizagem')
+            || str_contains($name, 'jovem aprendiz')
+        ) {
+            return 'aprendiz';
+        }
 
         if (str_contains($name, 'clt')) {
             return (bool) $employee->has_experience_period ? 'clt_experience' : 'clt';

@@ -22,8 +22,15 @@ class PayrollCompetencyForm
     {
         return $schema->components([
             Section::make('Dados da Competência')
-                ->columns(12)
+                ->columns([
+                    'default' => 1,
+                    'sm' => 2,
+                    'md' => 2,
+                    'lg' => 3,
+                    'xl' => 4,
+                ])
                 ->schema([
+
                     Select::make('company_id')
                         ->label('Empresa')
                         ->options(fn () => Company::query()
@@ -33,10 +40,15 @@ class PayrollCompetencyForm
                             ->toArray())
                         ->searchable()
                         ->preload()
+                        ->native(false)
                         ->required()
                         ->default(fn () => Auth::user()?->company_id)
                         ->live()
-                        ->columnSpan(4)
+                        ->columnSpan([
+                            'default' => 1,
+                            'lg' => 1,
+                            'xl' => 1,
+                        ])
                         ->afterStateUpdated(function (Set $set): void {
                             $set('branch_id', null);
                         }),
@@ -54,7 +66,12 @@ class PayrollCompetencyForm
                             ->toArray())
                         ->searchable()
                         ->preload()
-                        ->columnSpan(4),
+                        ->native(false)
+                        ->columnSpan([
+                            'default' => 1,
+                            'lg' => 1,
+                            'xl' => 1,
+                        ]),
 
                     Select::make('type')
                         ->label('Tipo')
@@ -67,8 +84,13 @@ class PayrollCompetencyForm
                         ])
                         ->default('monthly')
                         ->required()
+                        ->native(false)
                         ->live()
-                        ->columnSpan(4)
+                        ->columnSpan([
+                            'default' => 1,
+                            'lg' => 1,
+                            'xl' => 1,
+                        ])
                         ->afterStateUpdated(function (Get $get, Set $set): void {
                             self::updateDescription($get, $set);
                         }),
@@ -90,8 +112,9 @@ class PayrollCompetencyForm
                             12 => '12 - Dezembro',
                         ])
                         ->required()
+                        ->native(false)
                         ->live()
-                        ->columnSpan(3)
+                        ->columnSpan(1)
                         ->afterStateUpdated(function (Get $get, Set $set): void {
                             self::updatePeriod($get, $set);
                             self::updateDescription($get, $set);
@@ -106,8 +129,9 @@ class PayrollCompetencyForm
                         )
                         ->default(now()->year)
                         ->required()
+                        ->native(false)
                         ->live()
-                        ->columnSpan(3)
+                        ->columnSpan(1)
                         ->afterStateUpdated(function (Get $get, Set $set): void {
                             self::updatePeriod($get, $set);
                             self::updateDescription($get, $set);
@@ -125,33 +149,34 @@ class PayrollCompetencyForm
                         ])
                         ->default('open')
                         ->required()
-                        ->columnSpan(3),
+                        ->native(false)
+                        ->columnSpan(1),
 
                     DatePicker::make('payment_date')
                         ->label('Data de Pagamento')
                         ->native(false)
                         ->displayFormat('d/m/Y')
-                        ->columnSpan(3),
+                        ->columnSpan(1),
 
                     TextInput::make('description')
                         ->label('Descrição')
                         ->required()
                         ->maxLength(255)
-                        ->columnSpan(6),
+                        ->columnSpanFull(),
 
                     DatePicker::make('period_start')
                         ->label('Período Inicial')
                         ->native(false)
                         ->displayFormat('d/m/Y')
                         ->required()
-                        ->columnSpan(3),
+                        ->columnSpan(1),
 
                     DatePicker::make('period_end')
                         ->label('Período Final')
                         ->native(false)
                         ->displayFormat('d/m/Y')
                         ->required()
-                        ->columnSpan(3),
+                        ->columnSpan(1),
 
                     Placeholder::make('competency_hint')
                         ->label('Regra')
@@ -160,7 +185,6 @@ class PayrollCompetencyForm
                 ]),
 
             Section::make('Observações')
-                ->columns(12)
                 ->schema([
                     Textarea::make('notes')
                         ->label('Observações')
@@ -219,9 +243,6 @@ class PayrollCompetencyForm
             'advance' => 'Adiantamento',
         ];
 
-        $monthLabel = $months[$month] ?? (string) $month;
-        $typeLabel = $types[$type] ?? 'Competência';
-
-        $set('description', $typeLabel . ' - ' . $monthLabel . ' / ' . $year);
+        $set('description', ($types[$type] ?? 'Competência') . ' - ' . ($months[$month] ?? $month) . ' / ' . $year);
     }
 }

@@ -35,27 +35,28 @@ class SalaryAdvanceBatchReportService
                 throw new RuntimeException("Adiantamento #{$salaryAdvance->id} sem colaborador vinculado.");
             }
 
-            $pixKey = trim((string) (
-                $salaryAdvance->pix_key
-                ?: $employee->pix_key
-                ?: ''
-            ));
+            /*
+             * SEMPRE prioriza dados atuais do colaborador
+             */
+            $pixKey = trim((string) ($employee->pix_key ?: $salaryAdvance->pix_key ?: ''));
 
-            $pixKeyType = $salaryAdvance->pix_key_type
-                ?: $employee->pix_key_type
-                ?: $this->resolvePixKeyTypeFromValue($pixKey);
+            $pixKeyType = trim((string) (
+                $employee->pix_key_type
+                ?: $salaryAdvance->pix_key_type
+                ?: $this->resolvePixKeyTypeFromValue($pixKey)
+            ));
 
             if ($pixKey === '') {
                 throw new RuntimeException("Colaborador {$employee->name} sem chave PIX cadastrada.");
             }
 
-            if (! $pixKeyType) {
+            if ($pixKeyType === '') {
                 throw new RuntimeException("Tipo de chave PIX não identificado para {$employee->name}.");
             }
 
             $beneficiaryName = trim((string) (
-                $salaryAdvance->pix_holder_name
-                ?: $employee->pix_holder_name
+                $employee->pix_holder_name
+                ?: $salaryAdvance->pix_holder_name
                 ?: $employee->name
                 ?: 'FAVORECIDO'
             ));

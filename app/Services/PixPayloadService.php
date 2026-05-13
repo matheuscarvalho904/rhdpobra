@@ -74,18 +74,27 @@ class PixPayloadService
         }
 
         return match ($pixKeyType) {
-            'cpf' => preg_replace('/\D+/', '', $pixKey) ?? '',
-
-            'cnpj' => preg_replace('/\D+/', '', $pixKey) ?? '',
-
+            'cpf' => $this->normalizeCpf($pixKey),
+            'cnpj' => $this->normalizeCnpj($pixKey),
             'phone' => $this->normalizePhonePixKey($pixKey),
-
-            'email' => mb_strtolower($pixKey),
-
+            'email' => mb_strtolower(trim($pixKey)),
             'random' => preg_replace('/\s+/', '', $pixKey) ?? '',
-
             default => preg_replace('/\s+/', '', $pixKey) ?? '',
         };
+    }
+
+    protected function normalizeCpf(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return strlen($digits) === 11 ? $digits : '';
+    }
+
+    protected function normalizeCnpj(string $value): string
+    {
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return strlen($digits) === 14 ? $digits : '';
     }
 
     protected function normalizePhonePixKey(string $pixKey): string
@@ -97,7 +106,11 @@ class PixPayloadService
         }
 
         if (str_starts_with($digits, '55')) {
-            return '+' . $digits;
+            $digits = substr($digits, 2);
+        }
+
+        if (strlen($digits) < 10 || strlen($digits) > 11) {
+            return '';
         }
 
         return '+55' . $digits;

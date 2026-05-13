@@ -6,26 +6,26 @@ use App\Models\Employee;
 use App\Models\PayrollRun;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 class PayslipService
 {
+    public function __construct(
+        protected PixPayloadService $pixPayloadService,
+    ) {}
+
     public function generate(PayrollRun $run, Employee $employee)
     {
         $items = $this->getItems($run, $employee);
         $payslip = $this->buildPayslipObject($run, $employee, $items);
 
-        $data = [
+        return Pdf::loadView('pdf.payroll.payslip', [
             'payslip' => $payslip,
             'items' => $items,
             'employee' => $employee,
             'company' => $run->company,
             'work' => $run->work,
             'payrollRun' => $run,
-        ];
-
-        return Pdf::loadView('pdf.payroll.payslip', $data)
-            ->setPaper('a4', 'portrait');
+        ])->setPaper('a4', 'portrait');
     }
 
     public function stream(PayrollRun $run, Employee $employee)
@@ -172,49 +172,32 @@ class PayslipService
     protected function buildPixPayload(PayrollRun $run, Employee $employee, float $netAmount): ?string
     {
         $rawPixKey = trim((string) ($employee->pix_key ?? ''));
-        $pixKeyType = strtolower((string) ($employee->pix_key_type ?? ''));
+        $pixKeyType = strtolower(trim((string) ($employee->pix_key_type ?? '')));
 
         if ($rawPixKey === '' || $netAmount <= 0) {
             return null;
         }
 
-        $pixKey = match ($pixKeyType) {
-            'cpf', 'cnpj', 'phone', 'telefone', 'celular' => preg_replace('/\D+/', '', $rawPixKey),
-            default => $rawPixKey,
-        };
+        try {
+            return $this->pixPayloadService->generatePayload(
+                pixKey: $rawPixKey,
+                pixKeyType: $pixKeyType,
+                beneficiaryName: $employee->pix_holder_name ?: $employee->name ?: 'FAVORECIDO',
+                city: $employee->city ?: $run->company?->city ?: 'ARIPUANA',
+                amount: $netAmount,
+                txid: 'HOL' . $run->id . 'EMP' . $employee->id
+            );
+        } catch (\Throwable $e) {
+            logger()->error('Erro ao gerar payload PIX do holerite', [
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->name,
+                'pix_key' => $rawPixKey,
+                'pix_key_type' => $pixKeyType,
+                'message' => $e->getMessage(),
+            ]);
 
-        $pixKey = trim((string) $pixKey);
-
-        if ($pixKey === '') {
             return null;
         }
-
-        $companyName = trim((string) ($run->company->name ?? 'EMPRESA'));
-        $city = trim((string) ($run->company->city ?? 'CIDADE'));
-
-        $merchantName = strtoupper(substr($this->sanitizePixText($companyName), 0, 25));
-        $merchantCity = strtoupper(substr($this->sanitizePixText($city !== '' ? $city : 'CIDADE'), 0, 15));
-        $txid = strtoupper(substr('HOL' . $run->id . 'EMP' . $employee->id, 0, 25));
-
-        $merchantAccountInfo =
-            $this->emv('00', 'BR.GOV.BCB.PIX') .
-            $this->emv('01', $pixKey);
-
-        $amount = number_format($netAmount, 2, '.', '');
-
-        $payloadWithoutCrc =
-            '000201' .
-            $this->emv('26', $merchantAccountInfo) .
-            '52040000' .
-            '5303986' .
-            $this->emv('54', $amount) .
-            '5802BR' .
-            $this->emv('59', $merchantName) .
-            $this->emv('60', $merchantCity) .
-            $this->emv('62', $this->emv('05', $txid)) .
-            '6304';
-
-        return $payloadWithoutCrc . $this->crc16($payloadWithoutCrc);
     }
 
     protected function generatePixQrCodeDataUri(?string $payload): ?string
@@ -258,44 +241,6 @@ class PayslipService
 
             return null;
         }
-    }
-
-    protected function sanitizePixText(string $value): string
-    {
-        $value = Str::ascii($value);
-        $value = preg_replace('/[^A-Za-z0-9 ]+/', '', $value) ?? '';
-        $value = preg_replace('/\s+/', ' ', trim($value)) ?? '';
-
-        return $value;
-    }
-
-    protected function emv(string $id, string $value): string
-    {
-        $length = str_pad((string) strlen($value), 2, '0', STR_PAD_LEFT);
-
-        return $id . $length . $value;
-    }
-
-    protected function crc16(string $payload): string
-    {
-        $polynomial = 0x1021;
-        $result = 0xFFFF;
-
-        for ($offset = 0; $offset < strlen($payload); $offset++) {
-            $result ^= (ord($payload[$offset]) << 8);
-
-            for ($bitwise = 0; $bitwise < 8; $bitwise++) {
-                if (($result & 0x8000) !== 0) {
-                    $result = (($result << 1) ^ $polynomial);
-                } else {
-                    $result = $result << 1;
-                }
-
-                $result &= 0xFFFF;
-            }
-        }
-
-        return strtoupper(str_pad(dechex($result), 4, '0', STR_PAD_LEFT));
     }
 
     protected function fileName(Employee $employee, PayrollRun $run): string

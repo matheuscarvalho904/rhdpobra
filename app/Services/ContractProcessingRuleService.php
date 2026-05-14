@@ -6,19 +6,11 @@ use App\Models\ContractType;
 
 class ContractProcessingRuleService
 {
-    /**
-     * Regras por código do tipo de contrato.
-     */
     public static function getByContractTypeCode(?string $contractTypeCode): array
     {
-        $code = strtoupper(trim((string) $contractTypeCode));
+        $code = self::normalizeCode($contractTypeCode);
 
         return match ($code) {
-            /*
-            |--------------------------------------------------------------------------
-            | CLT / VÍNCULOS TRABALHISTAS
-            |--------------------------------------------------------------------------
-            */
             'CLT', 'EXPERIENCIA', 'TEMPORARIO', 'INTERMITENTE' => self::makeRules(
                 processingType: 'payroll_clt',
                 generatesPayroll: true,
@@ -32,11 +24,6 @@ class ContractProcessingRuleService
                 hasIrrf: true,
             ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | APRENDIZ
-            |--------------------------------------------------------------------------
-            */
             'APRENDIZ' => self::makeRules(
                 processingType: 'payroll_clt',
                 generatesPayroll: true,
@@ -50,11 +37,6 @@ class ContractProcessingRuleService
                 hasIrrf: true,
             ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | ESTÁGIO
-            |--------------------------------------------------------------------------
-            */
             'ESTAGIO' => self::makeRules(
                 processingType: 'internship_payment',
                 generatesPayroll: true,
@@ -68,11 +50,6 @@ class ContractProcessingRuleService
                 hasIrrf: false,
             ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | PESSOA FÍSICA / AUTÔNOMO / RPA
-            |--------------------------------------------------------------------------
-            */
             'PF', 'AUTONOMO', 'RPA' => self::makeRules(
                 processingType: 'payroll_rpa',
                 generatesPayroll: true,
@@ -80,17 +57,12 @@ class ContractProcessingRuleService
                 allowsPayslip: true,
                 hasFgts: false,
                 fgtsRate: 0.00,
-                hasInss: true,
-                inssOptional: true,
-                withInss: true,
-                hasIrrf: true,
+                hasInss: false,
+                inssOptional: false,
+                withInss: false,
+                hasIrrf: false,
             ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | PESSOA JURÍDICA
-            |--------------------------------------------------------------------------
-            */
             'PJ' => self::makeRules(
                 processingType: 'accounts_payable',
                 generatesPayroll: false,
@@ -104,18 +76,10 @@ class ContractProcessingRuleService
                 hasIrrf: false,
             ),
 
-            /*
-            |--------------------------------------------------------------------------
-            | PADRÃO
-            |--------------------------------------------------------------------------
-            */
             default => self::getDefaultRules(),
         };
     }
 
-    /**
-     * Busca as regras pelo ID do tipo de contrato.
-     */
     public static function getByContractTypeId(?int $contractTypeId): array
     {
         if (! $contractTypeId) {
@@ -131,9 +95,6 @@ class ContractProcessingRuleService
         return self::getByContractTypeCode($contractType->code);
     }
 
-    /**
-     * Regras padrão do sistema.
-     */
     public static function getDefaultRules(): array
     {
         return self::makeRules(
@@ -150,9 +111,6 @@ class ContractProcessingRuleService
         );
     }
 
-    /**
-     * Aplica regras automáticas a um array de dados.
-     */
     public static function applyToArray(array $data, ?int $contractTypeId): array
     {
         $rules = self::getByContractTypeId($contractTypeId);
@@ -162,26 +120,22 @@ class ContractProcessingRuleService
         $data['generates_accounts_payable'] = $rules['generates_accounts_payable'];
         $data['allows_payslip'] = $rules['allows_payslip'];
 
-        $data['has_fgts'] = $rules['has_fgts'];
-        $data['has_inss'] = $rules['has_inss'];
-        $data['has_irrf'] = $rules['has_irrf'];
-
-        $data['fgts_rate'] = ($rules['has_fgts'] ?? false)
+        $data['has_fgts'] = (bool) $rules['has_fgts'];
+        $data['fgts_rate'] = (bool) $rules['has_fgts']
             ? (float) ($rules['fgts_rate'] ?? 8.00)
             : 0.00;
 
-        $data['inss_optional'] = $rules['inss_optional'];
+        $data['has_inss'] = (bool) $rules['has_inss'];
+        $data['inss_optional'] = (bool) $rules['inss_optional'];
+        $data['with_inss'] = (bool) $rules['has_inss']
+            ? (bool) $rules['with_inss']
+            : false;
 
-        if (! array_key_exists('with_inss', $data) || ! $rules['inss_optional']) {
-            $data['with_inss'] = $rules['with_inss'];
-        }
+        $data['has_irrf'] = (bool) $rules['has_irrf'];
 
         return $data;
     }
 
-    /**
-     * Opções amigáveis para formulários.
-     */
     public static function processingTypeOptions(): array
     {
         return [
@@ -192,9 +146,6 @@ class ContractProcessingRuleService
         ];
     }
 
-    /**
-     * Monta um array padronizado de regras.
-     */
     protected static function makeRules(
         string $processingType,
         bool $generatesPayroll,
@@ -217,10 +168,23 @@ class ContractProcessingRuleService
             'fgts_rate' => $hasFgts ? round($fgtsRate, 2) : 0.00,
 
             'has_inss' => $hasInss,
-            'inss_optional' => $inssOptional,
+            'inss_optional' => $hasInss ? $inssOptional : false,
             'with_inss' => $hasInss ? $withInss : false,
 
             'has_irrf' => $hasIrrf,
         ];
+    }
+
+    protected static function normalizeCode(?string $code): string
+    {
+        $code = strtoupper(trim((string) $code));
+
+        $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $code);
+
+        if ($converted !== false) {
+            $code = $converted;
+        }
+
+        return preg_replace('/[^A-Z0-9_]/', '', $code) ?? '';
     }
 }

@@ -118,52 +118,63 @@ class TimeClosingsTable
             ->defaultSort('created_at', 'desc')
             ->recordActions([
                 Action::make('processarFechamento')
-                    ->label('Processar Fechamento')
-                    ->icon('heroicon-o-play-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->modalHeading('Processar fechamento de ponto')
-                    ->modalDescription('O sistema irá recalcular o fechamento e gerar eventos variáveis para a folha.')
-                    ->modalSubmitActionLabel('Processar')
-                    ->visible(fn (TimeClosing $record): bool => ! in_array($record->status, ['closed', 'canceled'], true))
-                    ->action(function (TimeClosing $record): void {
-                        try {
-                            if (! $record->payroll_competency_id) {
-                                Notification::make()
-                                    ->title('Competência da folha obrigatória')
-                                    ->body('Edite o fechamento e selecione uma competência da folha antes de processar.')
-                                    ->warning()
-                                    ->send();
+    ->label('Processar Fechamento')
+    ->icon('heroicon-o-play-circle')
+    ->color('success')
+    ->requiresConfirmation()
+    ->modalHeading('Processar fechamento de ponto')
+    ->modalDescription('O sistema irá recalcular o fechamento, gerar eventos variáveis e reprocessar a folha automaticamente.')
+    ->modalSubmitActionLabel('Processar')
+    ->visible(fn (TimeClosing $record): bool => ! in_array($record->status, ['closed', 'canceled'], true))
+    ->action(function (TimeClosing $record): void {
+        try {
+            if (! $record->payroll_competency_id) {
+                Notification::make()
+                    ->title('Competência da folha obrigatória')
+                    ->body('Edite o fechamento e selecione uma competência da folha antes de processar.')
+                    ->warning()
+                    ->send();
 
-                                return;
-                            }
+                return;
+            }
 
-                            $closing = app(TimeClosingProcessingService::class)->process($record);
+            $closing = app(TimeClosingProcessingService::class)->process($record);
 
-                            app(TimeClosingToPayrollService::class)->generate(
-                                $closing,
-                                $closing->payroll_competency_id
-                            );
+            app(TimeClosingToPayrollService::class)->generate(
+                $closing,
+                $closing->payroll_competency_id
+            );
 
-                            Notification::make()
-                                ->title('Fechamento processado com sucesso')
-                                ->body(
-                                    "Colaboradores: {$closing->employee_count} | " .
-                                    "Horas: {$closing->total_worked_hours} | " .
-                                    "Extras: {$closing->total_overtime_hours} | " .
-                                    "Atrasos: {$closing->total_delay_hours} | " .
-                                    "Faltas: {$closing->total_absence_days}"
-                                )
-                                ->success()
-                                ->send();
-                        } catch (Throwable $e) {
-                            Notification::make()
-                                ->title('Erro ao processar fechamento')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->send();
-                        }
-                    }),
+            $runs = PayrollRun::query()
+                ->where('company_id', $closing->company_id)
+                ->where('payroll_competency_id', $closing->payroll_competency_id)
+                ->whereIn('run_type', [
+                    'payroll_clt',
+                    'payroll_apprentice',
+                ])
+                ->get();
+
+            foreach ($runs as $run) {
+                app(\App\Services\PayrollRunProcessingService::class)
+                    ->reprocess($run);
+            }
+
+            Notification::make()
+                ->title('Fechamento processado com sucesso')
+                ->body(
+                    "Fechamento recalculado, eventos gerados e folha reprocessada automaticamente."
+                )
+                ->success()
+                ->send();
+
+        } catch (Throwable $e) {
+            Notification::make()
+                ->title('Erro ao processar fechamento')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }),
 
                 Action::make('reprocessarTudo')
                     ->label('Reprocessar Tudo')
@@ -263,21 +274,43 @@ class TimeClosingsTable
     ->color('warning')
     ->requiresConfirmation()
     ->modalHeading('Gerar banco de horas')
-    ->modalDescription('Irá gerar créditos/débitos com base no fechamento.')
+    ->modalDescription('Irá gerar créditos/débitos com base nas horas extras do fechamento.')
     ->modalSubmitActionLabel('Gerar')
     ->visible(fn (TimeClosing $record): bool => $record->status === 'processed')
     ->action(function (TimeClosing $record): void {
         try {
+            $record->loadMissing('payrollCompetency');
 
-            app(TimeBankService::class)->applyFromClosing($record);
+            $items = \Illuminate\Support\Facades\DB::table('time_closing_items')
+                ->where('time_closing_id', $record->id)
+                ->where('overtime_hours', '>', 0)
+                ->get();
+
+            foreach ($items as $item) {
+                $employee = \App\Models\Employee::find($item->employee_id);
+
+                if (! $employee) {
+                    continue;
+                }
+
+                app(TimeBankService::class)->applyOvertime(
+                    employee: $employee,
+                    overtimeHours: (float) $item->overtime_hours,
+                    destination: 'bank',
+                    monthlyLimit: 20.0,
+                    excessToPayroll: true,
+                    closing: $record,
+                    competency: $record->payrollCompetency,
+                );
+            }
 
             Notification::make()
                 ->title('Banco de horas atualizado')
+                ->body('As horas extras do fechamento foram enviadas para o banco de horas.')
                 ->success()
                 ->send();
 
         } catch (Throwable $e) {
-
             Notification::make()
                 ->title('Erro no banco de horas')
                 ->body($e->getMessage())

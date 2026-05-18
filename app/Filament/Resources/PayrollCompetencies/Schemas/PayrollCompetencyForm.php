@@ -64,7 +64,8 @@ class PayrollCompetencyForm
                         ->options([
                             'monthly' => 'Folha Mensal',
                             'vacation' => 'Férias',
-                            'thirteenth' => '13º Salário',
+                            'thirteenth_first' => '13º Salário - 1ª Parcela',
+                            'thirteenth_second' => '13º Salário - 2ª Parcela',
                             'termination' => 'Rescisão',
                             'advance' => 'Adiantamento',
                         ])
@@ -217,10 +218,11 @@ class PayrollCompetencyForm
             12 => 'Dezembro',
         ];
 
-        $types = [
+            $types = [
             'monthly' => 'Folha Mensal',
             'vacation' => 'Férias',
-            'thirteenth' => '13º Salário',
+            'thirteenth_first' => '13º Salário - 1ª Parcela',
+            'thirteenth_second' => '13º Salário - 2ª Parcela',
             'termination' => 'Rescisão',
             'advance' => 'Adiantamento',
         ];

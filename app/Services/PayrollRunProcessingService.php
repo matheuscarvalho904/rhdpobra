@@ -93,7 +93,9 @@ class PayrollRunProcessingService
             'payroll_clt',
             'payroll_apprentice',
             'payroll_rpa',
-            'internship_payment'
+            'internship_payment',
+            'thirteenth_first',
+            'thirteenth_second'
                 => $this->processPayrollEmployee($employee, $payrollRun),
 
             'accounts_payable' => $this->processAccountsPayable($employee, $payrollRun),
@@ -121,6 +123,9 @@ class PayrollRunProcessingService
 
                 'payroll_competency_id' => $payrollRun->payroll_competency_id,
                 'run_type' => $payrollRun->run_type,
+                'processing_type' => in_array($payrollRun->run_type, ['thirteenth_first', 'thirteenth_second'], true)
+                    ? $payrollRun->run_type
+                    : ($employee->processing_type ?? 'payroll_clt'),
 
                 'period_start' => $competency?->period_start?->format('Y-m-d'),
                 'period_end' => $competency?->period_end?->format('Y-m-d'),
@@ -315,6 +320,11 @@ class PayrollRunProcessingService
 
                     'internship_payment' => $query
                         ->where('processing_type', 'internship_payment')
+                        ->where('generates_payroll', true),
+
+                    'thirteenth_first',
+                    'thirteenth_second' => $query
+                        ->where('processing_type', 'payroll_clt')
                         ->where('generates_payroll', true),
 
                     'accounts_payable' => $query

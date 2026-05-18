@@ -422,13 +422,14 @@
         return number_format($value, 2, ',', '.');
     };
 
-    $documentTitle = match ($employee?->processing_type) {
-        'payroll_clt' => 'Holerite',
-        'payroll_rpa' => 'Recibo de Pagamento',
-        'internship_payment' => 'Comprovante de Bolsa',
-        'accounts_payable' => 'Comprovante de Pagamento',
-        default => 'Holerite',
-    };
+    $documentTitle = $payslip->document_title ?? match ($payrollRun?->run_type) {
+    'thirteenth_first' => 'RECIBO 13º SALÁRIO - 1ª PARCELA',
+    'thirteenth_second' => 'RECIBO 13º SALÁRIO - 2ª PARCELA',
+    'payroll_rpa' => 'Recibo de Pagamento',
+    'internship_payment' => 'Comprovante de Bolsa',
+    'accounts_payable' => 'Comprovante de Pagamento',
+    default => 'Holerite',
+};
 
     $salaryBaseItem = $items->first(function ($item) use ($normalizeText) {
         $code = $normalizeText($item->code ?? '');

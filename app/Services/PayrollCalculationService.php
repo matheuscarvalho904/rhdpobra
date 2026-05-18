@@ -14,73 +14,49 @@ use InvalidArgumentException;
 class PayrollCalculationService
 {
     public function calculateEmployee(Employee $employee, array $context = []): array
-{
-    $competencyId = $context['payroll_competency_id'] ?? null;
-    $contract = $employee->currentContract;
+    {
+        $competencyId = $context['payroll_competency_id'] ?? null;
+        $contract = $employee->currentContract;
 
-    if (! $contract) {
-        return [];
+        if (! $contract) {
+            return [];
+        }
+
+        if (! in_array($contract->status, ['ativo', 'em_aviso'], true)) {
+            return [];
+        }
+
+        $processingType = $context['processing_type']
+            ?? $context['run_type']
+            ?? $employee->processing_type
+            ?? 'payroll_clt';
+
+        $context['employee_contract_id'] = $context['employee_contract_id'] ?? $contract->id;
+        $context['salary'] = $context['salary'] ?? (float) ($contract->salary ?? $employee->salary ?? 0);
+        $context['admission_date'] = $context['admission_date'] ?? optional($contract->admission_date)?->format('Y-m-d');
+        $context['termination_date'] = $context['termination_date'] ?? optional($contract->termination_date)?->format('Y-m-d');
+
+        $fixedEvents = $this->getEmployeeFixedEvents($employee);
+        $variableEvents = $this->getEmployeeVariableEvents($employee, $competencyId);
+        $salaryAdvanceDiscount = $this->getSalaryAdvanceDiscount($employee, $competencyId);
+
+        return match ($processingType) {
+            'payroll_clt' => $this->processClt($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
+            'payroll_rpa' => $this->processRpa($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
+            'internship_payment' => $this->processInternship($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
+            'accounts_payable' => $this->processAccountsPayable($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
+
+            'thirteenth_first' => $this->processThirteenthFirst($employee, $context),
+            'thirteenth_second' => $this->processThirteenthSecond($employee, $context),
+
+            default => throw new InvalidArgumentException("Tipo de processamento inválido: {$processingType}"),
+        };
     }
 
-    if (! in_array($contract->status, ['ativo', 'em_aviso'], true)) {
-        return [];
+    public function calculate(Employee $employee, array $context = []): array
+    {
+        return $this->calculateEmployee($employee, $context);
     }
-
-    $processingType = $context['processing_type']
-        ?? $context['run_type']
-        ?? $employee->processing_type
-        ?? 'payroll_clt';
-
-    $context['employee_contract_id'] = $context['employee_contract_id'] ?? $contract->id;
-    $context['salary'] = $context['salary'] ?? (float) ($contract->salary ?? $employee->salary ?? 0);
-    $context['admission_date'] = $context['admission_date'] ?? optional($contract->admission_date)?->format('Y-m-d');
-    $context['termination_date'] = $context['termination_date'] ?? optional($contract->termination_date)?->format('Y-m-d');
-
-    $fixedEvents = $this->getEmployeeFixedEvents($employee);
-    $variableEvents = $this->getEmployeeVariableEvents($employee, $competencyId);
-    $salaryAdvanceDiscount = $this->getSalaryAdvanceDiscount($employee, $competencyId);
-
-    return match ($processingType) {
-        'payroll_clt' => $this->processClt(
-            employee: $employee,
-            context: $context,
-            fixedEvents: $fixedEvents,
-            variableEvents: $variableEvents,
-            salaryAdvanceDiscount: $salaryAdvanceDiscount,
-        ),
-
-        'payroll_rpa' => $this->processRpa(
-            employee: $employee,
-            context: $context,
-            fixedEvents: $fixedEvents,
-            variableEvents: $variableEvents,
-            salaryAdvanceDiscount: $salaryAdvanceDiscount,
-        ),
-
-        'internship_payment' => $this->processInternship(
-            employee: $employee,
-            context: $context,
-            fixedEvents: $fixedEvents,
-            variableEvents: $variableEvents,
-            salaryAdvanceDiscount: $salaryAdvanceDiscount,
-        ),
-
-        'accounts_payable' => $this->processAccountsPayable(
-            employee: $employee,
-            context: $context,
-            fixedEvents: $fixedEvents,
-            variableEvents: $variableEvents,
-            salaryAdvanceDiscount: $salaryAdvanceDiscount,
-        ),
-
-        default => throw new InvalidArgumentException("Tipo de processamento inválido: {$processingType}"),
-    };
-}
-
-public function calculate(Employee $employee, array $context = []): array
-{
-    return $this->calculateEmployee($employee, $context);
-}
 
     protected function processClt(
         Employee $employee,
@@ -94,19 +70,13 @@ public function calculate(Employee $employee, array $context = []): array
 
         $eventSummary = $this->summarizeEvents($employee, $fixedEvents, $variableEvents);
 
-        $grossAmount = $this->money(
-            $baseSalary + $eventSummary['provents_total']
-        );
+        $grossAmount = $this->money($baseSalary + $eventSummary['provents_total']);
 
         $inssBase = $grossAmount;
         $inssAmount = $employee->has_inss ? $this->calculateInss($inssBase, $context) : 0.0;
 
         $irrfData = $employee->has_irrf
-            ? $this->calculateIrrf(
-                grossTaxableValue: $grossAmount,
-                inssAmount: $inssAmount,
-                context: $context
-            )
+            ? $this->calculateIrrf($grossAmount, $inssAmount, $context)
             : $this->emptyIrrfData();
 
         $fgtsBase = $grossAmount;
@@ -116,10 +86,7 @@ public function calculate(Employee $employee, array $context = []): array
         $manualDiscounts = $eventSummary['discounts_total'];
 
         $totalDiscounts = $this->money(
-            $manualDiscounts
-            + $salaryAdvanceDiscount
-            + $inssAmount
-            + $irrfData['irrf_amount']
+            $manualDiscounts + $salaryAdvanceDiscount + $inssAmount + $irrfData['irrf_amount']
         );
 
         $netAmount = $this->money($grossAmount - $totalDiscounts);
@@ -163,18 +130,6 @@ public function calculate(Employee $employee, array $context = []): array
                 fgtsAmount: $fgtsAmount,
                 salaryAdvanceDiscount: $salaryAdvanceDiscount,
             ),
-            'calculation_memory' => [
-                'base_salary' => $baseSalary,
-                'provents_total' => $eventSummary['provents_total'],
-                'gross_amount' => $grossAmount,
-                'manual_discounts' => $manualDiscounts,
-                'salary_advance_discount' => $salaryAdvanceDiscount,
-                'inss_amount' => $inssAmount,
-                'irrf_amount' => $irrfData['irrf_amount'],
-                'total_discounts' => $totalDiscounts,
-                'net_amount' => $netAmount,
-                'ignored_events' => $eventSummary['ignored_events'] ?? [],
-            ],
         ];
     }
 
@@ -185,8 +140,7 @@ public function calculate(Employee $employee, array $context = []): array
         Collection $variableEvents,
         float $salaryAdvanceDiscount = 0
     ): array {
-        
-        $salaryData = $this->resolveBaseSalaryData($employee, $context, prorate: true);        
+        $salaryData = $this->resolveBaseSalaryData($employee, $context, prorate: true);
         $baseAmount = $salaryData['base_salary'];
 
         $eventSummary = $this->summarizeEvents($employee, $fixedEvents, $variableEvents);
@@ -200,22 +154,12 @@ public function calculate(Employee $employee, array $context = []): array
             : 0.0;
 
         $irrfData = $employee->has_irrf
-            ? $this->calculateIrrf(
-                grossTaxableValue: $grossAmount,
-                inssAmount: $inssAmount,
-                context: $context
-            )
+            ? $this->calculateIrrf($grossAmount, $inssAmount, $context)
             : $this->emptyIrrfData();
 
         $eventDiscounts = $eventSummary['discounts_total'];
 
-        $totalDiscounts = $this->money(
-            $eventDiscounts
-            + $salaryAdvanceDiscount
-            + $inssAmount
-            + $irrfData['irrf_amount']
-        );
-
+        $totalDiscounts = $this->money($eventDiscounts + $salaryAdvanceDiscount + $inssAmount + $irrfData['irrf_amount']);
         $netAmount = $this->money($grossAmount - $totalDiscounts);
 
         return [
@@ -257,18 +201,6 @@ public function calculate(Employee $employee, array $context = []): array
                 fgtsAmount: 0.0,
                 salaryAdvanceDiscount: $salaryAdvanceDiscount,
             ),
-            'calculation_memory' => [
-                'base_salary' => $baseAmount,
-                'provents_total' => $eventSummary['provents_total'],
-                'gross_amount' => $grossAmount,
-                'manual_discounts' => $eventDiscounts,
-                'salary_advance_discount' => $salaryAdvanceDiscount,
-                'inss_amount' => $inssAmount,
-                'irrf_amount' => $irrfData['irrf_amount'],
-                'total_discounts' => $totalDiscounts,
-                'net_amount' => $netAmount,
-                'ignored_events' => $eventSummary['ignored_events'] ?? [],
-            ],
         ];
     }
 
@@ -324,16 +256,6 @@ public function calculate(Employee $employee, array $context = []): array
                 fgtsAmount: 0.0,
                 salaryAdvanceDiscount: $salaryAdvanceDiscount,
             ),
-            'calculation_memory' => [
-                'base_salary' => $baseAmount,
-                'provents_total' => $eventSummary['provents_total'],
-                'gross_amount' => $grossAmount,
-                'manual_discounts' => $eventDiscounts,
-                'salary_advance_discount' => $salaryAdvanceDiscount,
-                'total_discounts' => $totalDiscounts,
-                'net_amount' => $netAmount,
-                'ignored_events' => $eventSummary['ignored_events'] ?? [],
-            ],
         ];
     }
 
@@ -389,17 +311,193 @@ public function calculate(Employee $employee, array $context = []): array
                 fgtsAmount: 0.0,
                 salaryAdvanceDiscount: $salaryAdvanceDiscount,
             ),
-            'calculation_memory' => [
-                'base_salary' => $baseAmount,
-                'provents_total' => $eventSummary['provents_total'],
-                'gross_amount' => $grossAmount,
-                'manual_discounts' => $eventDiscounts,
-                'salary_advance_discount' => $salaryAdvanceDiscount,
-                'total_discounts' => $totalDiscounts,
-                'net_amount' => $netAmount,
-                'ignored_events' => $eventSummary['ignored_events'] ?? [],
+        ];
+    }
+
+    protected function processThirteenthFirst(Employee $employee, array $context): array
+    {
+        $salary = (float) ($employee->currentContract?->salary ?? $employee->salary ?? 0);
+
+        if ($salary <= 0) {
+            return [];
+        }
+
+        $year = (int) ($context['competency_year'] ?? $context['year'] ?? now()->year);
+        $avos = $this->calculateThirteenthAvos($employee, $year);
+
+        if ($avos <= 0) {
+            return [];
+        }
+
+        $fullAmount = $this->money(($salary / 12) * $avos);
+        $firstAmount = $this->money($fullAmount / 2);
+
+        return [
+            'employee_id' => $employee->id,
+            'employee_name' => $employee->name,
+            'processing_type' => 'thirteenth_first',
+            'document_type' => '13_holerite',
+            'gross_amount' => $firstAmount,
+            'inss_amount' => 0.0,
+            'irrf_amount' => 0.0,
+            'fgts_amount' => 0.0,
+            'total_discounts' => 0.0,
+            'net_amount' => $firstAmount,
+            'base_salary' => $firstAmount,
+            'base_inss' => 0.0,
+            'base_fgts' => 0.0,
+            'base_irrf' => 0.0,
+            'items' => [
+                [
+                    'code' => '13_PRIMEIRA_PARCELA',
+                    'description' => '13 Salario - 1 Parcela',
+                    'type' => 'provento',
+                    'amount' => $firstAmount,
+                    'reference' => $avos,
+                    'source' => 'thirteenth',
+                ],
             ],
         ];
+    }
+
+    protected function processThirteenthSecond(Employee $employee, array $context): array
+    {
+        $salary = (float) ($employee->currentContract?->salary ?? $employee->salary ?? 0);
+
+        if ($salary <= 0) {
+            return [];
+        }
+
+        $year = (int) ($context['competency_year'] ?? $context['year'] ?? now()->year);
+        $avos = $this->calculateThirteenthAvos($employee, $year);
+
+        if ($avos <= 0) {
+            return [];
+        }
+
+        $grossAmount = $this->money(($salary / 12) * $avos);
+        $firstInstallment = $this->money($grossAmount / 2);
+
+        $inssAmount = $employee->has_inss ? $this->calculateInss($grossAmount, $context) : 0.0;
+
+        $irrfData = $employee->has_irrf
+            ? $this->calculateIrrf($grossAmount, $inssAmount, $context)
+            : $this->emptyIrrfData();
+
+        $fgtsRate = $employee->fgts_rate !== null ? (float) $employee->fgts_rate : 8.00;
+        $fgtsAmount = $employee->has_fgts ? $this->calculateFgts($grossAmount, $fgtsRate) : 0.0;
+
+        $totalDiscounts = $this->money($firstInstallment + $inssAmount + $irrfData['irrf_amount']);
+        $netAmount = $this->money($grossAmount - $totalDiscounts);
+
+        $items = [
+            [
+                'code' => '13_SALARIO',
+                'description' => '13 Salario',
+                'type' => 'provento',
+                'amount' => $grossAmount,
+                'reference' => $avos,
+                'source' => 'thirteenth',
+            ],
+            [
+                'code' => '13_ADIANTAMENTO',
+                'description' => 'Adiantamento 13 Salario',
+                'type' => 'desconto',
+                'amount' => $firstInstallment,
+                'reference' => 0,
+                'source' => 'thirteenth',
+            ],
+        ];
+
+        if ($inssAmount > 0) {
+            $items[] = [
+                'code' => 'INSS_13',
+                'description' => 'INSS 13 Salario',
+                'type' => 'desconto',
+                'amount' => $inssAmount,
+                'reference' => 0,
+                'source' => 'thirteenth',
+            ];
+        }
+
+        if ($irrfData['irrf_amount'] > 0) {
+            $items[] = [
+                'code' => 'IRRF_13',
+                'description' => 'IRRF 13 Salario',
+                'type' => 'desconto',
+                'amount' => $irrfData['irrf_amount'],
+                'reference' => 0,
+                'source' => 'thirteenth',
+            ];
+        }
+
+        if ($fgtsAmount > 0) {
+            $items[] = [
+                'code' => 'FGTS',
+                'description' => 'FGTS 13 Salario',
+                'type' => 'informativo',
+                'amount' => $fgtsAmount,
+                'reference' => 0,
+                'source' => 'thirteenth',
+            ];
+        }
+
+        return [
+            'employee_id' => $employee->id,
+            'employee_name' => $employee->name,
+            'processing_type' => 'thirteenth_second',
+            'document_type' => '13_holerite',
+            'gross_amount' => $grossAmount,
+            'inss_amount' => $inssAmount,
+            'irrf_amount' => $irrfData['irrf_amount'],
+            'fgts_amount' => $fgtsAmount,
+            'total_discounts' => $totalDiscounts,
+            'net_amount' => max(0, $netAmount),
+            'base_salary' => $grossAmount,
+            'base_inss' => $grossAmount,
+            'base_fgts' => $grossAmount,
+            'base_irrf' => $irrfData['irrf_base'],
+            'items' => $items,
+        ];
+    }
+
+    protected function calculateThirteenthAvos(Employee $employee, int $year): int
+    {
+        $admission = $employee->currentContract?->admission_date
+            ? Carbon::parse($employee->currentContract->admission_date)
+            : ($employee->admission_date ? Carbon::parse($employee->admission_date) : null);
+
+        if (! $admission) {
+            return 0;
+        }
+
+        $termination = $employee->currentContract?->termination_date
+            ? Carbon::parse($employee->currentContract->termination_date)
+            : ($employee->termination_date ? Carbon::parse($employee->termination_date) : null);
+
+        $avos = 0;
+
+        for ($month = 1; $month <= 12; $month++) {
+            $start = Carbon::create($year, $month, 1)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+
+            if ($admission->gt($end)) {
+                continue;
+            }
+
+            if ($termination && $termination->lt($start)) {
+                continue;
+            }
+
+            $workedStart = $admission->gt($start) ? $admission->copy() : $start->copy();
+            $workedEnd = $termination && $termination->lt($end) ? $termination->copy() : $end->copy();
+
+            if (($workedStart->diffInDays($workedEnd) + 1) >= 15) {
+                $avos++;
+            }
+        }
+
+        return min($avos, 12);
     }
 
     protected function getEmployeeFixedEvents(Employee $employee): Collection
@@ -412,21 +510,21 @@ public function calculate(Employee $employee, array $context = []): array
     }
 
     protected function getEmployeeVariableEvents(Employee $employee, ?int $competencyId): Collection
-{
-    if (! $competencyId) {
-        return collect();
-    }
+    {
+        if (! $competencyId) {
+            return collect();
+        }
 
-    return EmployeeVariableEvent::query()
-        ->with('payrollEvent')
-        ->where('employee_id', $employee->id)
-        ->where(function ($query) use ($competencyId) {
-            $query
-                ->where('payroll_competency_id', $competencyId)
-                ->orWhereNull('payroll_competency_id');
-        })
-        ->get();
-}
+        return EmployeeVariableEvent::query()
+            ->with('payrollEvent')
+            ->where('employee_id', $employee->id)
+            ->where(function ($query) use ($competencyId) {
+                $query
+                    ->where('payroll_competency_id', $competencyId)
+                    ->orWhereNull('payroll_competency_id');
+            })
+            ->get();
+    }
 
     protected function getSalaryAdvanceDiscount(Employee $employee, ?int $competencyId): float
     {
@@ -443,11 +541,8 @@ public function calculate(Employee $employee, array $context = []): array
         );
     }
 
-    protected function summarizeEvents(
-        Employee $employee,
-        Collection $fixedEvents,
-        Collection $variableEvents
-    ): array {
+    protected function summarizeEvents(Employee $employee, Collection $fixedEvents, Collection $variableEvents): array
+    {
         $allEvents = $this->mergeUniqueEvents($fixedEvents, $variableEvents);
 
         $proventsTotal = 0.0;
@@ -455,10 +550,7 @@ public function calculate(Employee $employee, array $context = []): array
         $ignored = [];
 
         foreach ($allEvents as $eventItem) {
-            $type = $this->normalizeEventType(
-                $eventItem->payrollEvent?->type ?? $eventItem->type ?? null
-            );
-
+            $type = $this->normalizeEventType($eventItem->payrollEvent?->type ?? $eventItem->type ?? null);
             $rawAmount = (float) ($eventItem->amount ?? 0);
 
             if ($rawAmount == 0.0) {
@@ -485,18 +577,11 @@ public function calculate(Employee $employee, array $context = []): array
             }
 
             if ($this->isSalaryDuplicateEvent($eventItem)) {
-                $ignored[] = [
-                    'reason' => 'salary_duplicate',
-                    'event_id' => $eventItem->id ?? null,
-                    'payroll_event_id' => $eventItem->payroll_event_id ?? null,
-                    'description' => $eventItem->payrollEvent?->name ?? 'Evento salário duplicado',
-                ];
                 continue;
             }
 
             if ($type === 'provento') {
                 $proventsTotal += $amount;
-                continue;
             }
 
             if ($type === 'desconto') {
@@ -553,19 +638,16 @@ public function calculate(Employee $employee, array $context = []): array
             'credito',
             'crédito',
             'credito_manual',
-            'crédito_manual'
-                => 'provento',
+            'crédito_manual' => 'provento',
 
             'desconto',
             'deduction',
             'debito',
             'débito',
-            'desconto_manual'
-                => 'desconto',
+            'desconto_manual' => 'desconto',
 
             'informativo',
-            'info'
-                => 'informativo',
+            'info' => 'informativo',
 
             default => null,
         };
@@ -579,129 +661,114 @@ public function calculate(Employee $employee, array $context = []): array
     }
 
     protected function buildPayrollItems(
-    Employee $employee,
-    float $baseSalary,
-    array $salaryData,
-    Collection $fixedEvents,
-    Collection $variableEvents,
-    float $inssAmount,
-    float $irrfAmount,
-    float $fgtsAmount,
-    float $salaryAdvanceDiscount
-): array {
-    $items = [];
+        Employee $employee,
+        float $baseSalary,
+        array $salaryData,
+        Collection $fixedEvents,
+        Collection $variableEvents,
+        float $inssAmount,
+        float $irrfAmount,
+        float $fgtsAmount,
+        float $salaryAdvanceDiscount
+    ): array {
+        $items = [];
 
-    // 🔥 SALÁRIO BASE
-    if ($baseSalary > 0) {
-        $salaryDescription = $salaryData['is_proportional']
-            ? sprintf(
-                'Salário Base Proporcional (%d/%d)',
-                (int) $salaryData['worked_days'],
-                (int) $salaryData['reference_days']
-            )
-            : 'Salário Base';
+        if ($baseSalary > 0) {
+            $salaryDescription = $salaryData['is_proportional']
+                ? sprintf('Salário Base Proporcional (%d/%d)', (int) $salaryData['worked_days'], (int) $salaryData['reference_days'])
+                : 'Salário Base';
 
-        $items[] = [
-            'code' => 'SALARIO',
-            'description' => $salaryDescription,
-            'type' => 'provento',
-            'amount' => $this->money($baseSalary),
-            'reference' => $salaryData['is_proportional']
-                ? 0 // 🔥 NÃO SALVAR STRING
-                : (float) ($salaryData['reference_days'] ?: 30),
-            'source' => 'base_salary',
-        ];
-    }
-
-    // 🔥 EVENTOS
-    foreach ($this->mergeUniqueEvents($fixedEvents, $variableEvents) as $event) {
-        $type = $this->normalizeEventType($event->payrollEvent?->type ?? $event->type ?? null);
-        $rawAmount = (float) ($event->amount ?? 0);
-
-        if ($type === null || $rawAmount == 0.0 || $this->isSalaryDuplicateEvent($event)) {
-            continue;
+            $items[] = [
+                'code' => 'SALARIO',
+                'description' => $salaryDescription,
+                'type' => 'provento',
+                'amount' => $this->money($baseSalary),
+                'reference' => $salaryData['is_proportional'] ? 0 : (float) ($salaryData['reference_days'] ?: 30),
+                'source' => 'base_salary',
+            ];
         }
 
-        $items[] = [
-            'code' => $event->payrollEvent?->code ?? ($event instanceof EmployeeFixedEvent ? 'FIXO' : 'VAR'),
-            'description' => $event->payrollEvent?->name ?? 'Evento',
-            'type' => $type === 'informativo' ? 'informativo' : $type,
-            'reference' => $this->normalizeReferenceNumber($this->resolveEventReference($event)),
-            'amount' => $this->money(abs($rawAmount)),
-            'source' => $event instanceof EmployeeFixedEvent ? 'fixed_event' : 'variable_event',
-            'payroll_event_id' => $event->payroll_event_id,
-        ];
+        foreach ($this->mergeUniqueEvents($fixedEvents, $variableEvents) as $event) {
+            $type = $this->normalizeEventType($event->payrollEvent?->type ?? $event->type ?? null);
+            $rawAmount = (float) ($event->amount ?? 0);
+
+            if ($type === null || $rawAmount == 0.0 || $this->isSalaryDuplicateEvent($event)) {
+                continue;
+            }
+
+            $items[] = [
+                'code' => $event->payrollEvent?->code ?? ($event instanceof EmployeeFixedEvent ? 'FIXO' : 'VAR'),
+                'description' => $event->payrollEvent?->name ?? 'Evento',
+                'type' => $type === 'informativo' ? 'informativo' : $type,
+                'reference' => $this->normalizeReferenceNumber($this->resolveEventReference($event)),
+                'amount' => $this->money(abs($rawAmount)),
+                'source' => $event instanceof EmployeeFixedEvent ? 'fixed_event' : 'variable_event',
+                'payroll_event_id' => $event->payroll_event_id,
+            ];
+        }
+
+        if ($salaryAdvanceDiscount > 0) {
+            $items[] = [
+                'code' => 'ADIANT',
+                'description' => 'Desconto de Adiantamento',
+                'type' => 'desconto',
+                'amount' => $this->money($salaryAdvanceDiscount),
+                'reference' => 0,
+                'source' => 'salary_advance',
+            ];
+        }
+
+        if ($inssAmount > 0) {
+            $items[] = [
+                'code' => 'INSS',
+                'description' => 'Desconto INSS',
+                'type' => 'desconto',
+                'amount' => $this->money($inssAmount),
+                'reference' => 0,
+                'source' => 'calculation',
+            ];
+        }
+
+        if ($irrfAmount > 0) {
+            $items[] = [
+                'code' => 'IRRF',
+                'description' => 'Desconto IRRF',
+                'type' => 'desconto',
+                'amount' => $this->money($irrfAmount),
+                'reference' => 0,
+                'source' => 'calculation',
+            ];
+        }
+
+        if ($fgtsAmount > 0) {
+            $items[] = [
+                'code' => 'FGTS',
+                'description' => 'FGTS (Depósito)',
+                'type' => 'informativo',
+                'amount' => $this->money($fgtsAmount),
+                'reference' => 0,
+                'source' => 'calculation',
+            ];
+        }
+
+        return array_values($items);
     }
 
-    // 🔥 ADIANTAMENTO
-    if ($salaryAdvanceDiscount > 0) {
-        $items[] = [
-            'code' => 'ADIANT',
-            'description' => 'Desconto de Adiantamento',
-            'type' => 'desconto',
-            'amount' => $this->money($salaryAdvanceDiscount),
-            'reference' => 0, // 🔥 CORREÇÃO
-            'source' => 'salary_advance',
-        ];
-    }
-
-    // 🔥 INSS
-    if ($inssAmount > 0) {
-        $items[] = [
-            'code' => 'INSS',
-            'description' => 'Desconto INSS',
-            'type' => 'desconto',
-            'amount' => $this->money($inssAmount),
-            'reference' => 0, // 🔥 CORREÇÃO
-            'source' => 'calculation',
-        ];
-    }
-
-    // 🔥 IRRF
-    if ($irrfAmount > 0) {
-        $items[] = [
-            'code' => 'IRRF',
-            'description' => 'Desconto IRRF',
-            'type' => 'desconto',
-            'amount' => $this->money($irrfAmount),
-            'reference' => 0, // 🔥 CORREÇÃO
-            'source' => 'calculation',
-        ];
-    }
-
-    // 🔥 FGTS
-    if ($fgtsAmount > 0) {
-        $items[] = [
-            'code' => 'FGTS',
-            'description' => 'FGTS (Depósito)',
-            'type' => 'informativo',
-            'amount' => $this->money($fgtsAmount),
-            'reference' => 0, // 🔥 CORREÇÃO
-            'source' => 'calculation',
-        ];
-    }
-
-    return array_values($items);
-}
     protected function resolveEventReference(object $event): ?string
-{
-    $eventName = mb_strtolower((string) ($event->payrollEvent?->name ?? ''));
-    $eventCode = mb_strtolower((string) ($event->payrollEvent?->code ?? ''));
+    {
+        $eventName = mb_strtolower((string) ($event->payrollEvent?->name ?? ''));
+        $eventCode = mb_strtolower((string) ($event->payrollEvent?->code ?? ''));
 
-    $isFalta = str_contains($eventName, 'falta') || str_contains($eventCode, 'falta');
-    $isHora = str_contains($eventName, 'hora') || str_contains($eventCode, 'hora');
+        $isFalta = str_contains($eventName, 'falta') || str_contains($eventCode, 'falta');
+        $isHora = str_contains($eventName, 'hora') || str_contains($eventCode, 'hora');
 
-    if ($isFalta) {
-        $faltasFields = [
-            'quantity',
-            'qty',
-            'days',
-            'days_quantity',
-            'reference_quantity',
-            'reference',
-        ];
+        $fields = $isFalta
+            ? ['quantity', 'qty', 'days', 'days_quantity', 'reference_quantity', 'reference']
+            : ($isHora
+                ? ['hours', 'hour_quantity', 'hours_quantity', 'worked_hours', 'overtime_hours', 'extra_hours', 'quantity', 'qty', 'reference_quantity', 'reference']
+                : ['reference', 'quantity', 'qty', 'hours', 'hour_quantity', 'hours_quantity', 'worked_hours', 'overtime_hours', 'extra_hours', 'days', 'days_quantity', 'percent', 'percentage']);
 
-        foreach ($faltasFields as $field) {
+        foreach ($fields as $field) {
             if (isset($event->{$field}) && $event->{$field} !== null && $event->{$field} !== '') {
                 $value = $event->{$field};
 
@@ -715,76 +782,12 @@ public function calculate(Employee $employee, array $context = []): array
 
         return null;
     }
-
-    if ($isHora) {
-        $hoursFields = [
-            'hours',
-            'hour_quantity',
-            'hours_quantity',
-            'worked_hours',
-            'overtime_hours',
-            'extra_hours',
-            'quantity',
-            'qty',
-            'reference_quantity',
-            'reference',
-        ];
-
-        foreach ($hoursFields as $field) {
-            if (isset($event->{$field}) && $event->{$field} !== null && $event->{$field} !== '') {
-                $value = $event->{$field};
-
-                if (is_numeric($value)) {
-                    return number_format((float) $value, 2, ',', '.');
-                }
-
-                return mb_substr(trim((string) $value), 0, 30);
-            }
-        }
-
-        return null;
-    }
-
-    $possibleFields = [
-        'reference',
-        'quantity',
-        'qty',
-        'hours',
-        'hour_quantity',
-        'hours_quantity',
-        'worked_hours',
-        'overtime_hours',
-        'extra_hours',
-        'days',
-        'days_quantity',
-        'percent',
-        'percentage',
-    ];
-
-    foreach ($possibleFields as $field) {
-        if (isset($event->{$field}) && $event->{$field} !== null && $event->{$field} !== '') {
-            $value = $event->{$field};
-
-            if (is_numeric($value)) {
-                return number_format((float) $value, 2, ',', '.');
-            }
-
-            return mb_substr(trim((string) $value), 0, 30);
-        }
-    }
-
-    return null;
-}
 
     protected function resolveBaseSalaryData(Employee $employee, array $context, ?bool $prorate = null): array
     {
         $fullSalary = isset($context['salary'])
-        ? $this->money((float) $context['salary'])
-        : $this->money((float) (
-            $employee->currentContract?->salary
-            ?? $employee->salary
-            ?? 0
-        ));
+            ? $this->money((float) $context['salary'])
+            : $this->money((float) ($employee->currentContract?->salary ?? $employee->salary ?? 0));
 
         $shouldProrate = $prorate ?? (bool) ($context['prorate_salary_on_admission'] ?? true);
 
@@ -810,12 +813,9 @@ public function calculate(Employee $employee, array $context = []): array
             ];
         }
 
-            $admissionDate = $this->parseDate($context['admission_date'] ?? null)
-                ?? $this->resolveEmployeeAdmissionDate($employee);
+        $admissionDate = $this->parseDate($context['admission_date'] ?? null) ?? $this->resolveEmployeeAdmissionDate($employee);
+        $terminationDate = $this->parseDate($context['termination_date'] ?? null) ?? $this->resolveEmployeeTerminationDate($employee);
 
-            $terminationDate = $this->parseDate($context['termination_date'] ?? null)
-                ?? $this->resolveEmployeeTerminationDate($employee);
-                
         if (! $admissionDate && ! $terminationDate) {
             return [
                 'base_salary' => $fullSalary,
@@ -826,14 +826,7 @@ public function calculate(Employee $employee, array $context = []): array
             ];
         }
 
-        $workedDays = $this->resolveWorkedDaysInPeriod(
-            periodStart: $period['start'],
-            periodEnd: $period['end'],
-            admissionDate: $admissionDate,
-            terminationDate: $terminationDate,
-            context: $context,
-        );
-
+        $workedDays = $this->resolveWorkedDaysInPeriod($period['start'], $period['end'], $admissionDate, $terminationDate, $context);
         $referenceDays = $this->resolveSalaryDivisorDays($period, $context);
 
         if ($workedDays === null || $referenceDays <= 0) {
@@ -882,27 +875,16 @@ public function calculate(Employee $employee, array $context = []): array
         );
 
         if ($start && $end) {
-            return [
-                'start' => $start->copy()->startOfDay(),
-                'end' => $end->copy()->endOfDay(),
-            ];
+            return ['start' => $start->copy()->startOfDay(), 'end' => $end->copy()->endOfDay()];
         }
 
-        $month = $context['competency_month']
-            ?? $context['month']
-            ?? data_get($context, 'payroll_competency.month');
-
-        $year = $context['competency_year']
-            ?? $context['year']
-            ?? data_get($context, 'payroll_competency.year');
+        $month = $context['competency_month'] ?? $context['month'] ?? data_get($context, 'payroll_competency.month');
+        $year = $context['competency_year'] ?? $context['year'] ?? data_get($context, 'payroll_competency.year');
 
         if ($month && $year) {
             $date = Carbon::createFromDate((int) $year, (int) $month, 1);
 
-            return [
-                'start' => $date->copy()->startOfMonth()->startOfDay(),
-                'end' => $date->copy()->endOfMonth()->endOfDay(),
-            ];
+            return ['start' => $date->copy()->startOfMonth()->startOfDay(), 'end' => $date->copy()->endOfMonth()->endOfDay()];
         }
 
         $referenceDate = $this->parseDate(
@@ -913,39 +895,37 @@ public function calculate(Employee $employee, array $context = []): array
         );
 
         if ($referenceDate) {
-            return [
-                'start' => $referenceDate->copy()->startOfMonth()->startOfDay(),
-                'end' => $referenceDate->copy()->endOfMonth()->endOfDay(),
-            ];
+            return ['start' => $referenceDate->copy()->startOfMonth()->startOfDay(), 'end' => $referenceDate->copy()->endOfMonth()->endOfDay()];
         }
 
         return null;
     }
 
     protected function resolveEmployeeAdmissionDate(Employee $employee): ?CarbonInterface
-{
-    return $this->parseDate(
-        $employee->currentContract?->admission_date
-            ?? $employee->currentContract?->hire_date
-            ?? $employee->admission_date
-            ?? $employee->hire_date
-            ?? $employee->admitted_at
-            ?? $employee->start_date
-            ?? null
-    );
-}
+    {
+        return $this->parseDate(
+            $employee->currentContract?->admission_date
+                ?? $employee->currentContract?->hire_date
+                ?? $employee->admission_date
+                ?? $employee->hire_date
+                ?? $employee->admitted_at
+                ?? $employee->start_date
+                ?? null
+        );
+    }
 
     protected function resolveEmployeeTerminationDate(Employee $employee): ?CarbonInterface
-{
-    return $this->parseDate(
-        $employee->currentContract?->termination_date
-            ?? $employee->termination_date
-            ?? $employee->dismissal_date
-            ?? $employee->demission_date
-            ?? $employee->end_date
-            ?? null
-    );
-}
+    {
+        return $this->parseDate(
+            $employee->currentContract?->termination_date
+                ?? $employee->termination_date
+                ?? $employee->dismissal_date
+                ?? $employee->demission_date
+                ?? $employee->end_date
+                ?? null
+        );
+    }
+
     protected function resolveWorkedDaysInPeriod(
         CarbonInterface $periodStart,
         CarbonInterface $periodEnd,
@@ -956,20 +936,12 @@ public function calculate(Employee $employee, array $context = []): array
         $workStart = $periodStart->copy()->startOfDay();
         $workEnd = $periodEnd->copy()->endOfDay();
 
-        if ($admissionDate) {
-            $admissionDate = $admissionDate->copy()->startOfDay();
-
-            if ($admissionDate->greaterThan($workStart)) {
-                $workStart = $admissionDate;
-            }
+        if ($admissionDate && $admissionDate->copy()->startOfDay()->greaterThan($workStart)) {
+            $workStart = $admissionDate->copy()->startOfDay();
         }
 
-        if ($terminationDate) {
-            $terminationDate = $terminationDate->copy()->endOfDay();
-
-            if ($terminationDate->lessThan($workEnd)) {
-                $workEnd = $terminationDate;
-            }
+        if ($terminationDate && $terminationDate->copy()->endOfDay()->lessThan($workEnd)) {
+            $workEnd = $terminationDate->copy()->endOfDay();
         }
 
         if ($workStart->greaterThan($workEnd)) {
@@ -983,10 +955,8 @@ public function calculate(Employee $employee, array $context = []): array
         return $this->normalizeWorkedDaysToThirtyDayMonth($workStart, $workEnd);
     }
 
-    protected function normalizeWorkedDaysToThirtyDayMonth(
-        CarbonInterface $workStart,
-        CarbonInterface $workEnd
-    ): int {
+    protected function normalizeWorkedDaysToThirtyDayMonth(CarbonInterface $workStart, CarbonInterface $workEnd): int
+    {
         $startDay = min((int) $workStart->day, 30);
         $endDay = min((int) $workEnd->day, 30);
 
@@ -1012,13 +982,9 @@ public function calculate(Employee $employee, array $context = []): array
             return max(1, (int) $context['salary_divisor_days']);
         }
 
-        $mode = $context['salary_divisor_mode'] ?? 'fixed_30';
-
-        if ($mode === 'calendar') {
-            return $period['start']->daysInMonth;
-        }
-
-        return 30;
+        return (($context['salary_divisor_mode'] ?? 'fixed_30') === 'calendar')
+            ? $period['start']->daysInMonth
+            : 30;
     }
 
     protected function calculateInss(float $baseValue, array $context = []): float
@@ -1088,12 +1054,7 @@ public function calculate(Employee $employee, array $context = []): array
         $alimonyDeduction = (float) ($context['alimony_deduction'] ?? 0);
         $otherLegalDeductions = (float) ($context['other_legal_deductions'] ?? 0);
 
-        $legalDeductions = $this->money(
-            $inssAmount
-            + ($dependents * $dependentDeduction)
-            + $alimonyDeduction
-            + $otherLegalDeductions
-        );
+        $legalDeductions = $this->money($inssAmount + ($dependents * $dependentDeduction) + $alimonyDeduction + $otherLegalDeductions);
 
         $forceMethod = $context['irrf_deduction_method'] ?? null;
 
@@ -1139,10 +1100,7 @@ public function calculate(Employee $employee, array $context = []): array
             $upTo = $row['up_to'];
 
             if ($upTo === null || $baseValue <= (float) $upTo) {
-                return max(
-                    0,
-                    $this->money(($baseValue * (float) $row['rate']) - (float) $row['deduction'])
-                );
+                return max(0, $this->money(($baseValue * (float) $row['rate']) - (float) $row['deduction']));
             }
         }
 
@@ -1211,31 +1169,30 @@ public function calculate(Employee $employee, array $context = []): array
         }
     }
 
+    protected function normalizeReferenceNumber(mixed $reference): float
+    {
+        if ($reference === null || $reference === '') {
+            return 0;
+        }
+
+        if (is_numeric($reference)) {
+            return round((float) $reference, 2);
+        }
+
+        $value = trim((string) $reference);
+
+        if (str_contains($value, '/')) {
+            return 0;
+        }
+
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+
+        return is_numeric($value) ? round((float) $value, 2) : 0;
+    }
+
     protected function money(float $value): float
     {
         return round($value, 2);
     }
-
-    protected function normalizeReferenceNumber(mixed $reference): float
-{
-    if ($reference === null || $reference === '') {
-        return 0;
-    }
-
-    if (is_numeric($reference)) {
-        return round((float) $reference, 2);
-    }
-
-    $value = trim((string) $reference);
-
-    // 🔥 evita erro com "30/30"
-    if (str_contains($value, '/')) {
-        return 0;
-    }
-
-    $value = str_replace('.', '', $value);
-    $value = str_replace(',', '.', $value);
-
-    return is_numeric($value) ? round((float) $value, 2) : 0;
-}
 }

@@ -242,13 +242,16 @@ class PayrollRunForm
     }
 
     protected static function runTypeOptions(): array
-    {
-        return [
-            'payroll_clt' => 'Folha CLT',
-            'payroll_apprentice' => 'Folha Aprendiz',
-            'internship_payment' => 'Folha Estágio',
-            'payroll_rpa' => 'Folha RPA / PF',
-            'accounts_payable' => 'Contas a Pagar / PJ',
-        ];
-    }
+{
+    return [
+        'payroll_clt' => 'Folha CLT',
+        'payroll_apprentice' => 'Folha Aprendiz',
+        'internship_payment' => 'Folha Estágio',
+        'payroll_rpa' => 'Folha RPA / PF',
+        'accounts_payable' => 'Contas a Pagar / PJ',
+
+        'thirteenth_first' => '13º Salário - 1ª Parcela',
+        'thirteenth_second' => '13º Salário - 2ª Parcela',
+    ];
+}
 }

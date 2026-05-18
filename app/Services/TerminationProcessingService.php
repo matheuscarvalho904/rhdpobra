@@ -68,11 +68,36 @@ class TerminationProcessingService
                 throw new RuntimeException('Desligamento sem colaborador ou contrato vinculado.');
             }
 
-            $this->contractLifecycleService->terminateContract(
-                contract: $contract,
-                terminationDate: optional($termination->termination_date)->format('Y-m-d'),
-                reason: $termination->termination_reason,
-            );
+            $isWorkedNotice = $termination->notice_type === 'worked';
+
+            $finalTerminationDate = $isWorkedNotice
+                ? optional($termination->notice_end_date)->format('Y-m-d')
+                : optional($termination->termination_date)->format('Y-m-d');
+
+            if (! $finalTerminationDate) {
+                $finalTerminationDate = now()->toDateString();
+            }
+
+            if ($isWorkedNotice) {
+                $this->contractLifecycleService->putInNotice($contract);
+
+                $contract->update([
+                    'termination_date' => $finalTerminationDate,
+                    'termination_reason' => $termination->termination_reason,
+                ]);
+
+                $employee->update([
+                    'status' => 'em_aviso',
+                    'is_active' => true,
+                    'termination_date' => $finalTerminationDate,
+                ]);
+            } else {
+                $this->contractLifecycleService->terminateContract(
+                    contract: $contract,
+                    terminationDate: $finalTerminationDate,
+                    reason: $termination->termination_reason,
+                );
+            }
 
             $termination->update([
                 'status' => 'closed',

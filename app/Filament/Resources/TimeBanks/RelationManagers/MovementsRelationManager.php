@@ -2,16 +2,7 @@
 
 namespace App\Filament\Resources\TimeBanks\RelationManagers;
 
-use Filament\Actions\CreateAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\EditAction;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\KeyValue;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -20,77 +11,11 @@ class MovementsRelationManager extends RelationManager
 {
     protected static string $relationship = 'movements';
 
-    protected static ?string $title = 'Movimentações';
+    protected static ?string $title = 'Extrato do Banco de Horas';
 
     public function form(Schema $schema): Schema
     {
-        return $schema->components([
-            Section::make('Movimento')
-                ->schema([
-                    Select::make('type')
-                        ->label('Tipo')
-                        ->options([
-                            'credit' => 'Crédito',
-                            'debit' => 'Débito',
-                            'adjustment' => 'Ajuste',
-                            'payout' => 'Pago em Folha',
-                            'expiration' => 'Expiração',
-                        ])
-                        ->required(),
-
-                    Select::make('origin')
-                        ->label('Origem')
-                        ->options([
-                            'manual' => 'Manual',
-                            'time_closing' => 'Fechamento',
-                            'payroll' => 'Folha',
-                            'expiration' => 'Expiração',
-                            'adjustment' => 'Ajuste',
-                        ])
-                        ->default('manual')
-                        ->required(),
-
-                    TextInput::make('hours')
-                        ->label('Horas')
-                        ->numeric()
-                        ->required(),
-
-                    DatePicker::make('movement_date')
-                        ->label('Data')
-                        ->default(now())
-                        ->required(),
-
-                    DatePicker::make('expires_at')
-                        ->label('Expira em')
-                        ->nullable(),
-
-                    Select::make('status')
-                        ->label('Status')
-                        ->options([
-                            'pending' => 'Pendente',
-                            'confirmed' => 'Confirmado',
-                            'canceled' => 'Cancelado',
-                        ])
-                        ->default('confirmed')
-                        ->required(),
-                ])
-                ->columns(3),
-
-            Section::make('Detalhes')
-                ->schema([
-                    Textarea::make('description')
-                        ->label('Descrição')
-                        ->rows(3)
-                        ->columnSpanFull(),
-
-                    KeyValue::make('metadata')
-                        ->label('Metadados')
-                        ->keyLabel('Chave')
-                        ->valueLabel('Valor')
-                        ->columnSpanFull(),
-                ])
-                ->collapsed(),
-        ]);
+        return $schema;
     }
 
     public function table(Table $table): Table
@@ -105,77 +30,60 @@ class MovementsRelationManager extends RelationManager
                 TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         'credit' => 'Crédito',
                         'debit' => 'Débito',
                         'adjustment' => 'Ajuste',
-                        'payout' => 'Pago em Folha',
+                        'payout' => 'Pagamento',
                         'expiration' => 'Expiração',
-                        default => $state ?: '-',
+                        default => ucfirst((string) $state),
                     })
-                    ->color(fn (?string $state): string => match ($state) {
+                    ->color(fn ($state) => match ($state) {
                         'credit' => 'success',
-                        'debit' => 'danger',
-                        'adjustment' => 'warning',
-                        'payout' => 'info',
-                        'expiration' => 'gray',
+                        'debit', 'expiration' => 'danger',
+                        'payout' => 'warning',
+                        'adjustment' => 'info',
                         default => 'gray',
                     }),
 
                 TextColumn::make('origin')
                     ->label('Origem')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                    ->formatStateUsing(fn ($state) => match ($state) {
                         'manual' => 'Manual',
                         'time_closing' => 'Fechamento',
                         'payroll' => 'Folha',
                         'expiration' => 'Expiração',
                         'adjustment' => 'Ajuste',
-                        default => $state ?: '-',
+                        default => ucfirst((string) $state),
                     }),
 
                 TextColumn::make('hours')
                     ->label('Horas')
-                    ->suffix('h')
-                    ->numeric(decimalPlaces: 2),
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' h'),
 
                 TextColumn::make('balance_after')
                     ->label('Saldo Após')
-                    ->suffix('h')
-                    ->numeric(decimalPlaces: 2),
-
-                TextColumn::make('status')
-                    ->label('Status')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' h')
                     ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'pending' => 'Pendente',
-                        'confirmed' => 'Confirmado',
-                        'canceled' => 'Cancelado',
-                        default => $state ?: '-',
+                    ->color(fn ($state): string => match (true) {
+                        (float) $state > 0 => 'success',
+                        (float) $state < 0 => 'danger',
+                        default => 'gray',
                     }),
 
                 TextColumn::make('description')
                     ->label('Descrição')
-                    ->limit(50)
-                    ->placeholder('-'),
-            ])
-            ->defaultSort('movement_date', 'desc')
-            ->headerActions([
-                CreateAction::make()
-                    ->label('Novo Movimento')
-                    ->mutateDataUsing(function (array $data): array {
-                        $bank = $this->getOwnerRecord();
+                    ->wrap()
+                    ->limit(80),
 
-                        $data['company_id'] = $bank->company_id;
-                        $data['employee_id'] = $bank->employee_id;
-                        $data['time_bank_id'] = $bank->id;
-
-                        return $data;
-                    }),
+                TextColumn::make('created_at')
+                    ->label('Criado em')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),
             ])
-            ->recordActions([
-                EditAction::make()->label('Editar'),
-                DeleteAction::make()->label('Excluir'),
-            ]);
+            ->defaultSort('movement_date', 'desc');
     }
 }

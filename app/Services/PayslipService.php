@@ -94,6 +94,16 @@ class PayslipService
             : 0.0;
 
         $salaryDescription = $salaryBaseItem->description ?? 'Salário Base';
+        $isThirteenth = in_array($run->run_type, [
+        'thirteenth_first',
+        'thirteenth_second',
+    ], true);
+
+    $documentTitle = match ($run->run_type) {
+        'thirteenth_first' => 'RECIBO 13º SALÁRIO - 1ª PARCELA',
+        'thirteenth_second' => 'RECIBO 13º SALÁRIO - 2ª PARCELA',
+        default => 'HOLERITE',
+    };
 
         $pixPayload = $this->buildPixPayload($run, $employee, $totalNet);
         $pixQrCodeDataUri = $this->generatePixQrCodeDataUri($pixPayload);
@@ -109,6 +119,8 @@ class PayslipService
         ]);
 
         return (object) [
+            'is_thirteenth' => $isThirteenth,
+            'document_title' => $documentTitle,
             'employee' => $employee,
             'company' => $run->company,
             'work' => $run->work,
@@ -245,7 +257,13 @@ class PayslipService
 
     protected function fileName(Employee $employee, PayrollRun $run): string
     {
-        return 'holerite-' . str($employee->name)->slug() . '-run-' . $run->id . '.pdf';
+        $prefix = match ($run->run_type) {
+    'thirteenth_first' => '13-primeira-parcela',
+    'thirteenth_second' => '13-segunda-parcela',
+    default => 'holerite',
+};
+
+return $prefix . '-' . str($employee->name)->slug() . '-run-' . $run->id . '.pdf';
     }
 
     protected function money(float $value): float

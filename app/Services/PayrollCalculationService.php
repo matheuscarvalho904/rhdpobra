@@ -42,6 +42,7 @@ class PayrollCalculationService
 
         return match ($processingType) {
             'payroll_clt' => $this->processClt($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
+            'payroll_apprentice' => $this->processApprentice($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
             'payroll_rpa' => $this->processRpa($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
             'internship_payment' => $this->processInternship($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
             'accounts_payable' => $this->processAccountsPayable($employee, $context, $fixedEvents, $variableEvents, $salaryAdvanceDiscount),
@@ -132,6 +133,44 @@ class PayrollCalculationService
             ),
         ];
     }
+
+    protected function processApprentice(
+    Employee $employee,
+    array $context,
+    Collection $fixedEvents,
+    Collection $variableEvents,
+    float $salaryAdvanceDiscount = 0
+): array {
+    // Jovem aprendiz usa base CLT, porém com FGTS de 2%
+    $employee->fgts_rate = 2.00;
+    $employee->has_fgts = true;
+    $employee->has_inss = true;
+
+    // Bloqueia horas extras para aprendiz
+    $variableEvents = $variableEvents->reject(function ($event) {
+        $code = mb_strtoupper((string) ($event->payrollEvent?->code ?? ''));
+
+        return in_array($code, [
+            'HORA_EXTRA_50',
+            'HORA_EXTRA_100',
+            'DSR_HE',
+            'BANCO_HORAS_PAGO',
+        ], true);
+    })->values();
+
+    $result = $this->processClt(
+        employee: $employee,
+        context: $context,
+        fixedEvents: $fixedEvents,
+        variableEvents: $variableEvents,
+        salaryAdvanceDiscount: $salaryAdvanceDiscount,
+    );
+
+    $result['processing_type'] = 'payroll_apprentice';
+    $result['document_type'] = 'holerite_aprendiz';
+
+    return $result;
+}
 
     protected function processRpa(
         Employee $employee,

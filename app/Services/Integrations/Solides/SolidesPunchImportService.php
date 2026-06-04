@@ -31,42 +31,64 @@ class SolidesPunchImportService
             DB::transaction(function () use ($integration, $startDate, $endDate, $import): void {
                 $service = new SolidesPointService($integration);
 
-                $result = $service->getPunchesByPeriod(
-                    startDate: $startDate,
-                    endDate: \Carbon\Carbon::parse($endDate)->addDay()->toDateString(),
-                    extraParams: [
-                        'page' => 0,
-                        'size' => 500,
-                    ],
-                );
-
-                if (! ($result['success'] ?? false)) {
-                    throw new \RuntimeException($result['message'] ?? 'Erro ao importar marcações da Sólides.');
-                }
-
-                $data = $result['data'] ?? [];
-                $content = $data['content'] ?? [];
-
                 $imported = 0;
                 $ignored = 0;
+                $totalRecords = 0;
 
-                foreach ($content as $payload) {
-                    $resultItem = $this->processPayload($integration, $import, $payload);
+                $page = 0;
+                $size = 500;
+                $totalPages = 1;
 
-                    $imported += $resultItem['imported'];
-                    $ignored += $resultItem['ignored'];
-                }
+                do {
+                    $result = $service->getPunchesByPeriod(
+                        startDate: $startDate,
+                        endDate: Carbon::parse($endDate)->addDay()->toDateString(),
+                        extraParams: [
+                            'page' => $page,
+                            'size' => $size,
+                        ],
+                    );
+
+                    if (! ($result['success'] ?? false)) {
+                        throw new \RuntimeException($result['message'] ?? 'Erro ao importar marcações da Sólides.');
+                    }
+
+                    $data = $result['data'] ?? [];
+                    $content = $data['content'] ?? [];
+
+                    if (! is_array($content)) {
+                        $content = [];
+                    }
+
+                    $totalPages = max(1, (int) ($data['totalPages'] ?? 1));
+                    $totalRecords += count($content);
+
+                    foreach ($content as $payload) {
+                        if (! is_array($payload)) {
+                            $ignored++;
+                            continue;
+                        }
+
+                        $resultItem = $this->processPayload($integration, $import, $payload);
+
+                        $imported += $resultItem['imported'];
+                        $ignored += $resultItem['ignored'];
+                    }
+
+                    $page++;
+                } while ($page < $totalPages);
 
                 $import->update([
                     'status' => 'completed',
-                    'total_records' => count($content),
+                    'total_records' => $totalRecords,
                     'imported_records' => $imported,
                     'ignored_records' => $ignored,
                     'metadata' => [
-                        'api_total_elements' => $data['totalElements'] ?? null,
-                        'api_total_pages' => $data['totalPages'] ?? null,
-                        'api_page' => $data['number'] ?? null,
-                        'api_size' => $data['size'] ?? null,
+                        'api_total_pages' => $totalPages,
+                        'api_last_page_processed' => max(0, $page - 1),
+                        'api_size' => $size,
+                        'period_start' => $startDate,
+                        'period_end' => $endDate,
                     ],
                     'finished_at' => now(),
                 ]);
@@ -79,6 +101,8 @@ class SolidesPunchImportService
             Log::error('Erro na importação Sólides/Tangerino', [
                 'integration_id' => $integration->id,
                 'import_id' => $import->id,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
                 'error' => $e->getMessage(),
             ]);
 

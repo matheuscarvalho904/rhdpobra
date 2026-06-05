@@ -157,6 +157,7 @@
                                 <th>Cargo</th>
                                 <th>Filial</th>
                                 <th>Chave PIX</th>
+                                <th class="right">Salário Base</th>
                                 <th class="right">Bruto</th>
                                 <th class="right">Descontos</th>
                                 <th class="right">Líquido</th>
@@ -171,6 +172,7 @@
                                     <td>{{ $row['job_role'] ?? '-' }}</td>
                                     <td>{{ $row['branch'] ?? '-' }}</td>
                                     <td>{{ $row['pix_key'] ?? '-' }}</td>
+                                    <td class="right">>{{ money($employeeData['base_salary'] ?? $employee->salary ?? 0) }}</td>
                                     <td class="right">{{ moneyReport($row['gross_total'] ?? 0) }}</td>
                                     <td class="right">{{ moneyReport($row['discounts_total'] ?? 0) }}</td>
                                     <td class="right">{{ moneyReport($row['net_total'] ?? 0) }}</td>

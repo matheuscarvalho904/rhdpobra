@@ -186,7 +186,7 @@
                             @endforelse
 
                             <tr>
-                                <td colspan="6" class="right bold">Total da Obra</td>
+                                <td colspan="7" class="right bold">Total da Obra</td>
                                 <td class="right bold">{{ moneyReport($workData['total_gross'] ?? 0) }}</td>
                                 <td class="right bold">{{ moneyReport($workData['total_discounts'] ?? 0) }}</td>
                                 <td class="right bold">{{ moneyReport($workData['total_net'] ?? 0) }}</td>

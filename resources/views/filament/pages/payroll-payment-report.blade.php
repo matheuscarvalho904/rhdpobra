@@ -70,6 +70,7 @@
                                         <th class="border px-2 py-2 text-left">Cargo</th>
                                         <th class="border px-2 py-2 text-left">Filial</th>
                                         <th class="border px-2 py-2 text-left">Chave PIX</th>
+                                        <th class="border px-2 py-2 text-right">Salário Base</th>
                                         <th class="border px-2 py-2 text-right">Valor Líquido</th>
                                     </tr>
                                 </thead>
@@ -82,6 +83,9 @@
                                             <td class="border px-2 py-2">{{ $row['job_role'] ?? '-' }}</td>
                                             <td class="border px-2 py-2">{{ $row['branch'] ?? '-' }}</td>
                                             <td class="border px-2 py-2">{{ $row['pix_key'] ?? '-' }}</td>
+                                            <td class="border px-2 py-2 text-right">
+                                                R$ {{ number_format((float) ($row['salary'] ?? 0), 2, ',', '.') }}
+                                            </td>
                                             <td class="border px-2 py-2 text-right">
                                                 R$ {{ number_format((float) ($row['net_total'] ?? 0), 2, ',', '.') }}
                                             </td>

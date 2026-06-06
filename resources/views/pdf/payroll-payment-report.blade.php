@@ -157,7 +157,6 @@
                                 <th>Cargo</th>
                                 <th>Filial</th>
                                 <th>Chave PIX</th>
-                                <th class="right">Salário Base</th>
                                 <th class="right">Bruto</th>
                                 <th class="right">Descontos</th>
                                 <th class="right">Líquido</th>
@@ -165,16 +164,17 @@
                         </thead>
                         <tbody>
                             @forelse(($workData['rows'] ?? []) as $row)
-                            <td>{{ $row['employee_name'] ?? '-' }}</td>
-                            <td>{{ formatCpfReport($row['cpf'] ?? null) }}</td>
-                            <td>{{ $row['registration_number'] ?? '-' }}</td>
-                            <td>{{ $row['job_role'] ?? '-' }}</td>
-                            <td>{{ $row['branch'] ?? '-' }}</td>
-                            <td>{{ $row['pix_key'] ?? '-' }}</td>
-                            <td class="right">{{ moneyReport($row['salary'] ?? $row['salary'] ?? 0) }}</td>
-                            <td class="right">{{ moneyReport($row['gross_total'] ?? 0) }}</td>
-                            <td class="right">{{ moneyReport($row['discounts_total'] ?? 0) }}</td>
-                            <td class="right">{{ moneyReport($row['net_total'] ?? 0) }}</td>
+                                <tr>
+                                    <td>{{ $row['employee_name'] ?? '-' }}</td>
+                                    <td>{{ formatCpfReport($row['cpf'] ?? null) }}</td>
+                                    <td>{{ $row['registration_number'] ?? '-' }}</td>
+                                    <td>{{ $row['job_role'] ?? '-' }}</td>
+                                    <td>{{ $row['branch'] ?? '-' }}</td>
+                                    <td>{{ $row['pix_key'] ?? '-' }}</td>
+                                    <td class="right">{{ moneyReport($row['gross_total'] ?? 0) }}</td>
+                                    <td class="right">{{ moneyReport($row['discounts_total'] ?? 0) }}</td>
+                                    <td class="right">{{ moneyReport($row['net_total'] ?? 0) }}</td>
+                                </tr>
                             @empty
                                 <tr>
                                     <td colspan="9" class="center muted">
@@ -184,7 +184,7 @@
                             @endforelse
 
                             <tr>
-                                <td colspan="7" class="right bold">Total da Obra</td>
+                                <td colspan="6" class="right bold">Total da Obra</td>
                                 <td class="right bold">{{ moneyReport($workData['total_gross'] ?? 0) }}</td>
                                 <td class="right bold">{{ moneyReport($workData['total_discounts'] ?? 0) }}</td>
                                 <td class="right bold">{{ moneyReport($workData['total_net'] ?? 0) }}</td>

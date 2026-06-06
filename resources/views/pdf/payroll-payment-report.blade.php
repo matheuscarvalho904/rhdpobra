@@ -171,7 +171,7 @@
                             <td>{{ $row['job_role'] ?? '-' }}</td>
                             <td>{{ $row['branch'] ?? '-' }}</td>
                             <td>{{ $row['pix_key'] ?? '-' }}</td>
-                            <td class="right">{{ moneyReport($row['base_salary'] ?? $row['salary'] ?? 0) }}</td>
+                            <td class="right">{{ moneyReport($row['salary'] ?? $row['salary'] ?? 0) }}</td>
                             <td class="right">{{ moneyReport($row['gross_total'] ?? 0) }}</td>
                             <td class="right">{{ moneyReport($row['discounts_total'] ?? 0) }}</td>
                             <td class="right">{{ moneyReport($row['net_total'] ?? 0) }}</td>

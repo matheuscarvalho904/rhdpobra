@@ -150,6 +150,7 @@ class PayrollPaymentReport extends Page
                 'branch' => $run->branch->name ?? 'Sem Filial',
                 'work' => $run->work->name ?? 'Sem Obra',
                 'pix_key' => $employee->pix_key ?? '-',
+                'base_salary' => (float) ($employee->salary ?? 0),
                 'gross_total' => $gross,
                 'discounts_total' => $discounts,
                 'net_total' => $net,

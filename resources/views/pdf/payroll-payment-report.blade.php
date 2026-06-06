@@ -157,7 +157,7 @@
                                 <th>Cargo</th>
                                 <th>Filial</th>
                                 <th>Chave PIX</th>
-                                <th>Salário Base</th>
+                                <th class="right">Salário Base</th>
                                 <th class="right">Bruto</th>
                                 <th class="right">Descontos</th>
                                 <th class="right">Líquido</th>

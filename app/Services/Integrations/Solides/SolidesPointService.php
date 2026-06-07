@@ -196,9 +196,12 @@ class SolidesPointService
     |--------------------------------------------------------------------------
     */
     protected function dateToMilliseconds(string $date): int
-    {
-        return Carbon::parse($date)->startOfDay()->timestamp * 1000;
-    }
+{
+    return Carbon::parse($date, 'America/Cuiaba')
+        ->startOfDay()
+        ->utc()
+        ->timestamp * 1000;
+}
 
     protected function safeJson(Response $response): mixed
     {

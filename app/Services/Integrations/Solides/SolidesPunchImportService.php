@@ -41,7 +41,7 @@ class SolidesPunchImportService
 
                 do {
                     $result = $service->getPunchesByPeriod(
-                        startDate: $startDate,
+                        startDate: Carbon::parse($startDate)->subDay()->toDateString(),
                         endDate: Carbon::parse($endDate)->addDay()->toDateString(),
                         extraParams: [
                             'page' => $page,

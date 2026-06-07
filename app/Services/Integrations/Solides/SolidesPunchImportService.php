@@ -267,13 +267,16 @@ class SolidesPunchImportService
     }
 
     protected function resolveExternalEmployeeId(array $payload): ?string
-    {
-        return $this->stringOrNull(
-            $payload['employeeId']
-                ?? data_get($payload, 'employee.id')
-                ?? null
-        );
-    }
+        {
+            return $this->stringOrNull(
+                $payload['employeeExternalId']
+                    ?? data_get($payload, 'employee.externalId')
+                    ?? data_get($payload, 'employee.cpf')
+                    ?? $payload['employeeId']
+                    ?? data_get($payload, 'employee.id')
+                    ?? null
+            );
+        }
 
     protected function resolveExternalEmployeeCode(array $payload): ?string
     {

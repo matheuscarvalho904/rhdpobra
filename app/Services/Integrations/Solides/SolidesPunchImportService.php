@@ -266,7 +266,7 @@ class SolidesPunchImportService
         return $mapping?->employee;
     }
 
-    protected function resolveExternalEmployeeId(array $payload): ?string
+            protected function resolveExternalEmployeeId(array $payload): ?string
         {
             return $this->stringOrNull(
                 $payload['employeeExternalId']

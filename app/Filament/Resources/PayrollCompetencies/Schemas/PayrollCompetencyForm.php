@@ -142,7 +142,8 @@ class PayrollCompetencyForm
                         ->columnSpan(1),
 
                     TextInput::make('description')
-                        ->label('Descrição')
+                        ->label('Descrição / Identificação')
+                        ->helperText('Exemplo: 05/2026 - Maio - FF ou 05/2026 - Maio - DC')
                         ->required()
                         ->maxLength(255)
                         ->columnSpanFull(),

@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\TimeEntries\Tables;
 
 use App\Models\TimeEntry;
-use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -27,7 +29,7 @@ class TimeEntriesTable
                     ->label('Colaborador')
                     ->searchable()
                     ->sortable()
-                    ->placeholder('Não vinculado'),
+                    ->placeholder('-'),
 
                 TextColumn::make('entry_date')
                     ->label('Data')
@@ -35,129 +37,140 @@ class TimeEntriesTable
                     ->sortable(),
 
                 TextColumn::make('entry_datetime')
-                    ->label('Marcação')
-                    ->dateTime('d/m/Y H:i:s')
+                    ->label('Horário')
+                    ->dateTime('H:i')
                     ->sortable(),
 
                 TextColumn::make('type')
                     ->label('Tipo')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'entrada', 'in', 'IN', 'ENTRY' => 'Entrada',
-                        'saida', 'saída', 'out', 'OUT', 'EXIT' => 'Saída',
-                        'unknown' => 'Não identificado',
-                        default => $state ?: 'Não identificado',
+                        'entrada' => 'Entrada',
+                        'saida' => 'Saída',
+                        default => $state ?: '-',
                     })
                     ->color(fn (?string $state): string => match ($state) {
-                        'entrada', 'in', 'IN', 'ENTRY' => 'success',
-                        'saida', 'saída', 'out', 'OUT', 'EXIT' => 'danger',
+                        'entrada' => 'success',
+                        'saida' => 'danger',
                         default => 'gray',
+                    }),
+
+                TextColumn::make('provider')
+                    ->label('Provedor')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'solides' => 'Sólides',
+                        'manual' => 'Manual',
+                        default => $state ?: '-',
+                    })
+                    ->color(fn (?string $state): string => match ($state) {
+                        'manual' => 'warning',
+                        'solides' => 'info',
+                        default => 'gray',
+                    }),
+
+                TextColumn::make('source')
+                    ->label('Fonte')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'api' => 'API',
+                        'manual' => 'Manual',
+                        default => $state ?: '-',
                     }),
 
                 TextColumn::make('status')
                     ->label('Status')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'valid' => 'Válida',
-                        'pending' => 'Pendente',
-                        'ignored' => 'Ignorada',
-                        'adjusted' => 'Ajustada',
+                        'valid' => 'Válido',
+                        'invalid' => 'Inválido',
                         default => $state ?: '-',
                     })
                     ->color(fn (?string $state): string => match ($state) {
                         'valid' => 'success',
-                        'pending' => 'warning',
-                        'ignored' => 'gray',
-                        'adjusted' => 'info',
+                        'invalid' => 'danger',
                         default => 'gray',
                     }),
 
-                TextColumn::make('provider')
-                    ->label('Origem')
-                    ->badge()
-                    ->formatStateUsing(fn (?string $state): string => match ($state) {
-                        'solides' => 'Sólides',
-                        default => $state ?: '-',
-                    }),
-
-                TextColumn::make('external_employee_id')
-                    ->label('ID Externo Colaborador')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('external_id')
-                    ->label('ID Externo Marcação')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('notes')
+                    ->label('Observação')
+                    ->limit(60)
+                    ->placeholder('-')
+                    ->toggleable(),
 
                 TextColumn::make('created_at')
-                    ->label('Importado em')
+                    ->label('Criado em')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('company_id')
-                    ->label('Empresa')
                     ->relationship('company', 'name')
+                    ->label('Empresa')
                     ->searchable()
                     ->preload(),
 
                 SelectFilter::make('employee_id')
-                    ->label('Colaborador')
                     ->relationship('employee', 'name')
+                    ->label('Colaborador')
                     ->searchable()
                     ->preload(),
 
-                SelectFilter::make('status')
-                    ->label('Status')
+                SelectFilter::make('type')
+                    ->label('Tipo')
                     ->options([
-                        'valid' => 'Válida',
-                        'pending' => 'Pendente',
-                        'ignored' => 'Ignorada',
-                        'adjusted' => 'Ajustada',
+                        'entrada' => 'Entrada',
+                        'saida' => 'Saída',
                     ]),
 
                 SelectFilter::make('provider')
                     ->label('Origem')
                     ->options([
                         'solides' => 'Sólides',
+                        'manual' => 'Manual',
                     ]),
 
-                Filter::make('entry_date')
+                SelectFilter::make('status')
+                    ->label('Status')
+                    ->options([
+                        'valid' => 'Válido',
+                        'invalid' => 'Inválido',
+                    ]),
+
+                Filter::make('periodo')
                     ->label('Período')
                     ->form([
-                        DatePicker::make('from')
-                            ->label('Data inicial'),
+                        DatePicker::make('start_date')
+                            ->label('Data Inicial')
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
 
-                        DatePicker::make('until')
-                            ->label('Data final'),
+                        DatePicker::make('end_date')
+                            ->label('Data Final')
+                            ->native(false)
+                            ->displayFormat('d/m/Y'),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
                             ->when(
-                                $data['from'] ?? null,
+                                $data['start_date'] ?? null,
                                 fn (Builder $query, $date): Builder => $query->whereDate('entry_date', '>=', $date),
                             )
                             ->when(
-                                $data['until'] ?? null,
+                                $data['end_date'] ?? null,
                                 fn (Builder $query, $date): Builder => $query->whereDate('entry_date', '<=', $date),
                             );
                     }),
             ])
             ->defaultSort('entry_datetime', 'desc')
             ->recordActions([
-                Action::make('visualizar')
-                    ->label('Visualizar')
-                    ->icon('heroicon-o-eye')
-                    ->color('gray')
-                    ->modalHeading('Detalhes da Marcação')
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Fechar')
-                    ->modalContent(fn (TimeEntry $record) => view(
-                        'filament.resources.time-entries.view-entry',
-                        ['record' => $record]
-                    )),
+                EditAction::make(),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                ]),
             ]);
     }
 }

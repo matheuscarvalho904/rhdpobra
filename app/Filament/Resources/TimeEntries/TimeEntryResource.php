@@ -2,11 +2,16 @@
 
 namespace App\Filament\Resources\TimeEntries;
 
+use App\Filament\Resources\TimeEntries\Pages\CreateTimeEntry;
+use App\Filament\Resources\TimeEntries\Pages\EditTimeEntry;
 use App\Filament\Resources\TimeEntries\Pages\ListTimeEntries;
+use App\Filament\Resources\TimeEntries\Schemas\TimeEntryForm;
 use App\Filament\Resources\TimeEntries\Tables\TimeEntriesTable;
 use App\Models\TimeEntry;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
 
@@ -14,23 +19,35 @@ class TimeEntryResource extends Resource
 {
     protected static ?string $model = TimeEntry::class;
 
-    protected static ?string $navigationLabel = 'Marcações de Ponto';
-    protected static ?string $modelLabel = 'Marcação de Ponto';
-    protected static ?string $pluralModelLabel = 'Marcações de Ponto';
+    protected static ?string $navigationLabel = 'Ajuste de Marcações';
+    protected static ?string $modelLabel = 'Marcação';
+    protected static ?string $pluralModelLabel = 'Ajuste de Marcações';
 
-    protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-clock';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
     protected static string|UnitEnum|null $navigationGroup = 'Ponto';
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 12;
+
+    public static function form(Schema $schema): Schema
+    {
+        return TimeEntryForm::configure($schema);
+    }
 
     public static function table(Table $table): Table
     {
         return TimeEntriesTable::configure($table);
     }
 
+    public static function getRelations(): array
+    {
+        return [];
+    }
+
     public static function getPages(): array
     {
         return [
             'index' => ListTimeEntries::route('/'),
+            'create' => CreateTimeEntry::route('/create'),
+            'edit' => EditTimeEntry::route('/{record}/edit'),
         ];
     }
 }

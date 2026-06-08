@@ -30,6 +30,25 @@ class TimeEntry extends Model
         'raw_payload' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (TimeEntry $record): void {
+            $record->provider ??= 'manual';
+            $record->source ??= 'manual';
+            $record->status ??= 'valid';
+
+            if (! $record->entry_date && $record->entry_datetime) {
+                $record->entry_date = $record->entry_datetime->toDateString();
+            }
+        });
+
+        static::updating(function (TimeEntry $record): void {
+            if ($record->entry_datetime) {
+                $record->entry_date = $record->entry_datetime->toDateString();
+            }
+        });
+    }
+
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);

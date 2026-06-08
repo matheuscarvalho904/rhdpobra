@@ -141,11 +141,14 @@ class PayrollCompetencyForm
                         ->displayFormat('d/m/Y')
                         ->columnSpan(1),
 
-                    TextInput::make('description')
-                        ->label('Descrição / Identificação')
-                        ->helperText('Exemplo: 05/2026 - Maio - FF ou 05/2026 - Maio - DC')
-                        ->required()
-                        ->maxLength(255)
+                    TextInput::make('identifier')
+                        ->label('Identificação')
+                        ->placeholder('FF, DC, Ampla, Dardanellos...')
+                        ->maxLength(50)
+                        ->live()
+                        ->afterStateUpdated(function (Get $get, Set $set) {
+                            self::updateDescription($get, $set);
+                        })
                         ->columnSpanFull(),
 
                     DatePicker::make('period_start')
@@ -195,39 +198,50 @@ class PayrollCompetencyForm
     }
 
     protected static function updateDescription(Get $get, Set $set): void
-    {
-        $month = (int) ($get('month') ?? 0);
-        $year = (int) ($get('year') ?? 0);
-        $type = $get('type');
+{
+    $month = (int) ($get('month') ?? 0);
+    $year = (int) ($get('year') ?? 0);
+    $type = $get('type');
+    $identifier = trim((string) ($get('identifier') ?? ''));
 
-        if (! $month || ! $year) {
-            return;
-        }
-
-        $months = [
-            1 => 'Janeiro',
-            2 => 'Fevereiro',
-            3 => 'Março',
-            4 => 'Abril',
-            5 => 'Maio',
-            6 => 'Junho',
-            7 => 'Julho',
-            8 => 'Agosto',
-            9 => 'Setembro',
-            10 => 'Outubro',
-            11 => 'Novembro',
-            12 => 'Dezembro',
-        ];
-
-            $types = [
-            'monthly' => 'Folha Mensal',
-            'vacation' => 'Férias',
-            'thirteenth_first' => '13º Salário - 1ª Parcela',
-            'thirteenth_second' => '13º Salário - 2ª Parcela',
-            'termination' => 'Rescisão',
-            'advance' => 'Adiantamento',
-        ];
-
-        $set('description', ($types[$type] ?? 'Competência') . ' - ' . ($months[$month] ?? $month) . ' / ' . $year);
+    if (! $month || ! $year) {
+        return;
     }
+
+    $months = [
+        1 => 'Janeiro',
+        2 => 'Fevereiro',
+        3 => 'Março',
+        4 => 'Abril',
+        5 => 'Maio',
+        6 => 'Junho',
+        7 => 'Julho',
+        8 => 'Agosto',
+        9 => 'Setembro',
+        10 => 'Outubro',
+        11 => 'Novembro',
+        12 => 'Dezembro',
+    ];
+
+    $types = [
+        'monthly' => 'Folha Mensal',
+        'vacation' => 'Férias',
+        'thirteenth_first' => '13º Salário - 1ª Parcela',
+        'thirteenth_second' => '13º Salário - 2ª Parcela',
+        'termination' => 'Rescisão',
+        'advance' => 'Adiantamento',
+    ];
+
+    $description = ($types[$type] ?? 'Competência')
+        . ' - '
+        . ($months[$month] ?? $month)
+        . ' / '
+        . $year;
+
+    if ($identifier !== '') {
+        $description .= ' - ' . $identifier;
+    }
+
+    $set('description', $description);
+}
 }

@@ -179,15 +179,9 @@ class TimeClosingsTable
     ->label('Ajustar Marcações')
     ->icon('heroicon-o-clock')
     ->color('warning')
-    ->url(fn (TimeClosing $record) => route(
-        'filament.admin.resources.time-entries.index',
-        [
-            'start_date' => $record->start_date?->format('Y-m-d'),
-            'end_date' => $record->end_date?->format('Y-m-d'),
-        ]
-    ))
+    ->url(fn () => \App\Filament\Resources\TimeEntries\TimeEntryResource::getUrl('index'))
     ->openUrlInNewTab(),
-
+    
                 Action::make('reprocessarTudo')
                     ->label('Reprocessar Tudo')
                     ->icon('heroicon-o-arrow-path-rounded-square')

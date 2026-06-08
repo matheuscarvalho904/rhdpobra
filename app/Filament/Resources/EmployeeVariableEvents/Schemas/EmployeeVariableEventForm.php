@@ -78,15 +78,25 @@ class EmployeeVariableEventForm
                             ->columnSpan(2),
 
                         TextInput::make('amount')
-                        ->label('Valor')
-                        ->prefix('R$')
-                        ->numeric()
-                        ->step('0.01')
-                        ->inputMode('decimal')
-                        ->formatStateUsing(fn ($state) => $state === null ? '0.00' : number_format((float) $state, 2, '.', ''))
-                        ->dehydrateStateUsing(fn ($state) => blank($state) ? 0 : (float) str_replace(',', '.', str_replace('.', '', (string) $state)))
-                        ->default(0)
-                        ->columnSpan(2),
+                            ->label('Valor')
+                            ->prefix('R$')
+                            ->mask(RawJs::make(<<<'JS'
+                                $money($input, ',', '.', 2)
+                            JS))
+                            ->formatStateUsing(fn ($state) => number_format((float) $state, 2, ',', '.'))
+                            ->dehydrateStateUsing(function ($state) {
+                                if (blank($state)) {
+                                    return 0;
+                                }
+
+                                $value = str_replace(['R$', ' ', '.'], '', (string) $state);
+                                $value = str_replace(',', '.', $value);
+
+                                return (float) $value;
+                            })
+                            ->default('0,00')
+                            ->columnSpan(2),
+
                         TextInput::make('percentage')
                             ->label('Percentual')
                             ->suffix('%')

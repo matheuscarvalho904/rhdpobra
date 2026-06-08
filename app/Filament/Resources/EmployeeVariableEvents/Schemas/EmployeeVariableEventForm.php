@@ -35,34 +35,24 @@ class EmployeeVariableEventForm
                             ->preload()
                             ->required()
                             ->columnSpan(2),
-
-                        Select::make('payroll_competency_id')
-                            ->label('Competência')
-                            ->options(
-                                PayrollCompetency::query()
-                                    ->orderByDesc('year')
-                                    ->orderByDesc('month')
-                                    ->get()
-                                    ->mapWithKeys(fn ($item) => [
-                                        $item->id => sprintf(
-                                            '%02d/%04d - %s',
-                                            $item->month,
-                                            $item->year,
-                                            match ($item->type) {
-                                                'monthly' => 'Mensal',
-                                                'vacation' => 'Férias',
-                                                'thirteenth' => '13º',
-                                                'termination' => 'Rescisão',
-                                                'advance' => 'Adiantamento',
-                                                default => $item->type,
-                                            }
-                                        ),
-                                    ])
-                            )
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->columnSpan(2),
+                            Select::make('payroll_competency_id')
+                                ->label('Competência')
+                                ->options(
+                                    PayrollCompetency::query()
+                                        ->with('company')
+                                        ->orderByDesc('year')
+                                        ->orderByDesc('month')
+                                        ->get()
+                                        ->mapWithKeys(fn ($item) => [
+                                            $item->id => $item->description
+                                                ?: sprintf('%02d/%04d - %s', $item->month, $item->year, $item->company?->name ?? 'Empresa'),
+                                        ])
+                                        ->toArray()
+                                )
+                                ->searchable()
+                                ->preload()
+                                ->required()
+                                ->columnSpan(2),
 
                         Select::make('payroll_event_id')
                             ->label('Evento da Folha')

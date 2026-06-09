@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\TimeClosings\Schemas;
 
+use App\Models\PayrollCompetency;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -29,26 +30,22 @@ class TimeClosingForm
                         ->required(),
 
                     Select::make('payroll_competency_id')
-                        ->label('Competência da Folha')
-                        ->relationship('payrollCompetency', 'id')
-                        ->getOptionLabelFromRecordUsing(function ($record): string {
-                            $month = str_pad((string) $record->month, 2, '0', STR_PAD_LEFT);
-                            $year = $record->year;
-
-                            $type = match ($record->type ?? null) {
-                                'monthly' => 'Mensal',
-                                'vacation' => 'Férias',
-                                '13th' => '13º',
-                                'termination' => 'Rescisão',
-                                'advance' => 'Adiantamento',
-                                default => ucfirst((string) ($record->type ?? 'Folha')),
-                            };
-
-                            return "{$month}/{$year} - {$type}";
-                        })
-                        ->searchable()
-                        ->preload()
-                        ->required(),
+                    ->label('Competência da Folha')
+                    ->options(
+                        PayrollCompetency::query()
+                            ->with('company')
+                            ->orderByDesc('year')
+                            ->orderByDesc('month')
+                            ->get()
+                            ->mapWithKeys(fn ($item) => [
+                                $item->id => $item->description
+                                    ?: sprintf('%02d/%04d - %s', $item->month, $item->year, $item->company?->name ?? 'Empresa'),
+                            ])
+                            ->toArray()
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->required(),
 
                     DatePicker::make('start_date')
                         ->label('Data Inicial')

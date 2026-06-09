@@ -26,19 +26,10 @@ class TimeClosingsTable
                     ->sortable()
                     ->placeholder('-'),
 
-                TextColumn::make('payrollCompetency')
+                TextColumn::make('payrollCompetency.description')
                     ->label('Competência')
-                    ->formatStateUsing(function (TimeClosing $record): string {
-                        $competency = $record->payrollCompetency;
-
-                        if (! $competency) {
-                            return '-';
-                        }
-
-                        $month = str_pad((string) $competency->month, 2, '0', STR_PAD_LEFT);
-
-                        return "{$month}/{$competency->year}";
-                    }),
+                    ->searchable()
+                    ->placeholder('-'),
 
                 TextColumn::make('name')
                     ->label('Fechamento')
@@ -184,7 +175,7 @@ class TimeClosingsTable
         'end_date' => $record->end_date?->format('Y-m-d'),
     ]))
     ->openUrlInNewTab(),
-    
+
                 Action::make('reprocessarTudo')
                     ->label('Reprocessar Tudo')
                     ->icon('heroicon-o-arrow-path-rounded-square')

@@ -107,14 +107,16 @@ class ListTimeEntries extends ListRecords
         $tableFilters = [];
 
         if (request()->filled('start_date') || request()->filled('end_date')) {
-            $tableFilters['periodo'] = [
-                'start_date' => request()->get('start_date'),
-                'end_date' => request()->get('end_date'),
-            ];
-        }
+    $tableFilters['periodo'] = [
+        'start_date' => request()->get('start_date'),
+        'end_date' => request()->get('end_date'),
+    ];
+}
 
-        if (! empty($tableFilters)) {
-            $this->tableFilters = $tableFilters;
-        }
+if (request()->filled('employee_id')) {
+    $tableFilters['employee_id'] = [
+        'value' => request()->get('employee_id'),
+    ];
+}
     }
 }

@@ -47,14 +47,14 @@ class PayrollPaymentReport extends Page
             ->orderByDesc('month')
             ->get()
             ->mapWithKeys(fn ($item) => [
-                $item->id => sprintf(
+                $item->id => $item->description ?: sprintf(
                     '%02d/%04d - %s',
                     $item->month,
                     $item->year,
                     match ($item->type) {
                         'monthly' => 'Mensal',
                         'vacation' => 'Férias',
-                        'thirteenth' => '13º',
+                        'thirteenth_first', 'thirteenth_second', 'thirteenth' => '13º',
                         'termination' => 'Rescisão',
                         'advance' => 'Adiantamento',
                         default => $item->type,
@@ -157,6 +157,11 @@ class PayrollPaymentReport extends Page
                 'fgts_total' => $fgts,
             ];
         })->filter()->values();
+
+        // Ordenação alfabética final por colaborador, aplicada tanto na tela quanto no PDF.
+        $flatRows = $flatRows
+            ->sortBy(fn ($row) => mb_strtoupper($row['employee_name'] ?? ''))
+            ->values();
 
         $this->rows = $flatRows
             ->groupBy('company')

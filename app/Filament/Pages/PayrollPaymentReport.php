@@ -156,30 +156,13 @@ class PayrollPaymentReport extends Page
                 'net_total' => $net,
                 'fgts_total' => $fgts,
             ];
-        })->filter()->values();
-
-        // Ordenação alfabética final por colaborador, aplicada tanto na tela quanto no PDF.
-        $flatRows = $flatRows
+        })
+            ->filter()
             ->sortBy(fn ($row) => mb_strtoupper($row['employee_name'] ?? ''))
             ->values();
 
-        $this->rows = $flatRows
-            ->groupBy('company')
-            ->map(function ($companyRows) {
-                return $companyRows
-                    ->groupBy('work')
-                    ->map(function ($workRows) {
-                        return [
-                            'rows' => $workRows->values()->toArray(),
-                            'total_gross' => round((float) $workRows->sum('gross_total'), 2),
-                            'total_discounts' => round((float) $workRows->sum('discounts_total'), 2),
-                            'total_net' => round((float) $workRows->sum('net_total'), 2),
-                            'total_fgts' => round((float) $workRows->sum('fgts_total'), 2),
-                        ];
-                    })
-                    ->toArray();
-            })
-            ->toArray();
+        // Ordem alfabética global, sem agrupamento por empresa/obra.
+        $this->rows = $flatRows->toArray();
 
         $this->totalGross = round((float) $flatRows->sum('gross_total'), 2);
         $this->totalDiscounts = round((float) $flatRows->sum('discounts_total'), 2);

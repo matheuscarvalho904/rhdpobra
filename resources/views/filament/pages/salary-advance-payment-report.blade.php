@@ -6,7 +6,7 @@
                     Relatório de Pagamento de Adiantamentos
                 </h2>
                 <p class="mt-1 text-sm text-gray-500">
-                    Filtre os dados por empresa, filial, obra, período, status e forma de pagamento.
+                    Relatório em ordem alfabética global, independente de empresa ou obra.
                 </p>
             </div>
 
@@ -97,14 +97,9 @@
             </div>
 
             <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-                <div class="text-sm font-medium text-gray-500">Forma de Pagamento</div>
-                <div class="mt-2 text-base font-bold text-gray-900">
-                    @switch($this->payment_method)
-                        @case('pix') PIX @break
-                        @case('bank_transfer') Transferência @break
-                        @case('cash') Dinheiro @break
-                        @default Todos
-                    @endswitch
+                <div class="text-sm font-medium text-gray-500">Registros</div>
+                <div class="mt-2 text-2xl font-bold text-gray-900">
+                    {{ count($this->rows ?? []) }}
                 </div>
             </div>
 
@@ -116,96 +111,73 @@
             </div>
         </div>
 
-        <div class="space-y-6">
-            @forelse ($this->rows as $company => $works)
-                <div class="rounded-2xl border border-gray-200 bg-white shadow-sm">
-                    <div class="border-b border-gray-200 px-6 py-4">
-                        <h3 class="text-lg font-bold text-gray-900">
-                            Empresa: {{ $company }}
-                        </h3>
-                    </div>
+        <div class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div class="border-b border-gray-200 px-6 py-4">
+                <h3 class="text-lg font-bold text-gray-900">
+                    Pagamentos de Adiantamentos
+                </h3>
+                <p class="mt-1 text-sm text-gray-500">
+                    Ordem alfabética global por colaborador.
+                </p>
+            </div>
 
-                    <div class="px-6 py-6 space-y-6">
-                        @foreach ($works as $work => $data)
-                            <div class="rounded-2xl border border-gray-200 overflow-hidden">
-                                <div class="flex items-center justify-between bg-gray-50 px-4 py-3">
-                                    <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">
-                                        Obra: {{ $work }}
-                                    </h4>
-                                    <div class="text-sm font-semibold text-gray-700">
-                                        Total da Obra:
-                                        <span class="text-gray-900">R$ {{ number_format($data['total'], 2, ',', '.') }}</span>
-                                    </div>
-                                </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Colaborador</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Empresa</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Obra</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Matrícula</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Cargo</th>
+                            <th class="px-4 py-3 text-center font-bold text-gray-700">Data</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Pagamento</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Tipo PIX</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Chave PIX</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Documento</th>
+                            <th class="px-4 py-3 text-left font-bold text-gray-700">Status</th>
+                            <th class="px-4 py-3 text-right font-bold text-gray-700">Valor</th>
+                        </tr>
+                    </thead>
 
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full divide-y divide-gray-200 text-sm">
-                                        <thead class="bg-gray-100">
-                                            <tr>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Colaborador</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Matrícula</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Cargo</th>
-                                                <th class="px-4 py-3 text-center font-bold text-gray-700">Data</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Pagamento</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Tipo PIX</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Chave PIX</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Documento</th>
-                                                <th class="px-4 py-3 text-left font-bold text-gray-700">Status</th>
-                                                <th class="px-4 py-3 text-right font-bold text-gray-700">Valor</th>
-                                            </tr>
-                                        </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white">
+                        @forelse ($this->rows as $row)
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 font-medium text-gray-900">{{ $row['employee_name'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['company'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['work'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['code'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['job_role'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-center text-gray-700">{{ $row['advance_date'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['payment_method'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['pix_key_type'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['pix_key'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['pix_holder_document'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-gray-700">{{ $row['status'] ?? '-' }}</td>
+                                <td class="px-4 py-3 text-right font-semibold text-gray-900">
+                                    R$ {{ number_format((float) ($row['amount'] ?? 0), 2, ',', '.') }}
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="12" class="px-4 py-10 text-center text-gray-500">
+                                    Nenhum dado encontrado para os filtros informados.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
 
-                                        <tbody class="divide-y divide-gray-100 bg-white">
-                                            @foreach ($data['rows'] as $row)
-                                                <tr class="hover:bg-gray-50">
-                                                    <td class="px-4 py-3 font-medium text-gray-900">{{ $row['employee_name'] }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['code'] ?: '-' }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['job_role'] ?: '-' }}</td>
-                                                    <td class="px-4 py-3 text-center text-gray-700">{{ $row['advance_date'] }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['payment_method'] }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['pix_key_type'] ?: '-' }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['pix_key'] ?: '-' }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['pix_holder_document'] ?: '-' }}</td>
-                                                    <td class="px-4 py-3 text-gray-700">{{ $row['status'] }}</td>
-                                                    <td class="px-4 py-3 text-right font-semibold text-gray-900">
-                                                        R$ {{ number_format($row['amount'], 2, ',', '.') }}
-                                                    </td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-
-                                        <tfoot class="bg-gray-50">
-                                            <tr>
-                                                <td colspan="9" class="px-4 py-3 text-right text-sm font-bold text-gray-700">
-                                                    Total da Obra
-                                                </td>
-                                                <td class="px-4 py-3 text-right text-sm font-bold text-primary-700">
-                                                    R$ {{ number_format($data['total'], 2, ',', '.') }}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @empty
-                <div class="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
-                    <div class="text-base font-semibold text-gray-700">Nenhum dado gerado ainda.</div>
-                    <div class="mt-1 text-sm text-gray-500">
-                        Ajuste os filtros e clique em <strong>Gerar Relatório</strong>.
-                    </div>
-                </div>
-            @endforelse
-        </div>
-
-        <div class="rounded-2xl border border-primary-200 bg-primary-50 p-5 shadow-sm">
-            <div class="flex items-center justify-between">
-                <span class="text-base font-semibold text-primary-900">Total Geral do Relatório</span>
-                <span class="text-2xl font-bold text-primary-700">
-                    R$ {{ number_format($this->totalAmount, 2, ',', '.') }}
-                </span>
+                    <tfoot class="bg-gray-50">
+                        <tr>
+                            <td colspan="11" class="px-4 py-3 text-right text-sm font-bold text-gray-700">
+                                Total Geral
+                            </td>
+                            <td class="px-4 py-3 text-right text-sm font-bold text-primary-700">
+                                R$ {{ number_format($this->totalAmount, 2, ',', '.') }}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
             </div>
         </div>
     </div>

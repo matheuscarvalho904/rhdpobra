@@ -10,7 +10,6 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 
 class SalaryAdvancePaymentReport extends Page
 {
@@ -104,29 +103,31 @@ class SalaryAdvancePaymentReport extends Page
         $records = $this->getFilteredQuery()
             ->with([
                 'employee',
+                'employee.jobRole',
                 'company',
                 'work',
             ])
-            ->orderBy('company_id')
-            ->orderBy('work_id')
-            ->orderBy('advance_date')
             ->get();
 
-        $grouped = [];
+        $rows = [];
         $total = 0;
 
         foreach ($records as $record) {
-            $companyName = $record->company?->name ?: 'Sem Empresa';
-            $workName = $record->work?->name ?: 'Sem Obra';
+            // Evita linhas vazias no relatório quando o adiantamento ficou sem colaborador vinculado.
+            if (! $record->employee) {
+                continue;
+            }
 
             $amount = (float) $record->amount;
             $total += $amount;
 
-            $grouped[$companyName][$workName]['rows'][] = [
+            $rows[] = [
                 'employee_name' => $record->employee?->name ?: '-',
+                'company' => $record->company?->name ?: 'Sem Empresa',
+                'work' => $record->work?->name ?: 'Sem Obra',
                 'code' => $record->employee?->code ?: '-',
                 'job_role' => $record->employee?->jobRole?->name ?: '-',
-                'advance_date' => optional($record->advance_date)->format('d/m/Y') ?: '-',
+                'advance_date' => optional($record->advance_date)?->format('d/m/Y') ?: '-',
                 'pix_key_type' => $this->formatPixKeyType($record->pix_key_type),
                 'pix_key' => $record->pix_key ?: '-',
                 'pix_holder_document' => $record->pix_holder_document ?: '-',
@@ -134,12 +135,13 @@ class SalaryAdvancePaymentReport extends Page
                 'status' => $this->formatStatus($record->status),
                 'amount' => $amount,
             ];
-
-            $grouped[$companyName][$workName]['total'] =
-                ($grouped[$companyName][$workName]['total'] ?? 0) + $amount;
         }
 
-        $this->rows = $grouped;
+        $this->rows = collect($rows)
+            ->sortBy(fn ($row) => mb_strtoupper($row['employee_name'] ?? ''))
+            ->values()
+            ->toArray();
+
         $this->totalAmount = round($total, 2);
     }
 

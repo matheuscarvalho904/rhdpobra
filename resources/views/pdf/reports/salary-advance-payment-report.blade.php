@@ -8,7 +8,7 @@
 
         body {
             font-family: DejaVu Sans, sans-serif;
-            font-size: 10px;
+            font-size: 9px;
             color: #111827;
         }
 
@@ -51,22 +51,26 @@
 
         th, td {
             border: 1px solid #cbd5e1;
-            padding: 5px 6px;
+            padding: 4px 5px;
+            vertical-align: middle;
         }
 
         th {
             background: #f3f4f6;
             text-align: left;
+            font-weight: bold;
         }
 
         .right {
             text-align: right;
         }
 
-        .company-title,
-        .work-title {
+        .center {
+            text-align: center;
+        }
+
+        .bold {
             font-weight: bold;
-            margin: 10px 0 6px;
         }
 
         .total-box {
@@ -83,7 +87,7 @@
     <div class="header">
         <div class="title">Relatório de Pagamento de Adiantamentos</div>
         <div class="subtitle">
-            Gerado em {{ $generatedAt->format('d/m/Y H:i') }}
+            Gerado em {{ $generatedAt->format('d/m/Y H:i') }} | Ordem: Alfabética global
         </div>
     </div>
 
@@ -105,53 +109,56 @@
         </div>
     </div>
 
-    @foreach($rows as $company => $works)
-        <div class="section-box">
-            <div class="box-title">Empresa: {{ $company }}</div>
-            <div class="box-body">
-                @foreach($works as $work => $data)
-                    <div class="work-title">Obra: {{ $work }}</div>
+    <div class="section-box">
+        <div class="box-title">Pagamentos de Adiantamentos</div>
+        <div class="box-body">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Colaborador</th>
+                        <th>Empresa</th>
+                        <th>Obra</th>
+                        <th>Matrícula</th>
+                        <th>Cargo</th>
+                        <th>Data</th>
+                        <th>Pagamento</th>
+                        <th>Tipo PIX</th>
+                        <th>Chave PIX</th>
+                        <th>Documento</th>
+                        <th>Status</th>
+                        <th class="right">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($rows as $row)
+                        <tr>
+                            <td>{{ $row['employee_name'] ?? '-' }}</td>
+                            <td>{{ $row['company'] ?? '-' }}</td>
+                            <td>{{ $row['work'] ?? '-' }}</td>
+                            <td>{{ $row['code'] ?? '-' }}</td>
+                            <td>{{ $row['job_role'] ?? '-' }}</td>
+                            <td>{{ $row['advance_date'] ?? '-' }}</td>
+                            <td>{{ $row['payment_method'] ?? '-' }}</td>
+                            <td>{{ $row['pix_key_type'] ?? '-' }}</td>
+                            <td>{{ $row['pix_key'] ?? '-' }}</td>
+                            <td>{{ $row['pix_holder_document'] ?? '-' }}</td>
+                            <td>{{ $row['status'] ?? '-' }}</td>
+                            <td class="right">R$ {{ number_format((float) ($row['amount'] ?? 0), 2, ',', '.') }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="12" class="center">Nenhum dado encontrado para os filtros informados.</td>
+                        </tr>
+                    @endforelse
 
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Colaborador</th>
-                                <th>Matrícula</th>
-                                <th>Cargo</th>
-                                <th>Data</th>
-                                <th>Pagamento</th>
-                                <th>Tipo PIX</th>
-                                <th>Chave PIX</th>
-                                <th>Documento</th>
-                                <th>Status</th>
-                                <th class="right">Valor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($data['rows'] as $row)
-                                <tr>
-                                    <td>{{ $row['employee_name'] }}</td>
-                                    <td>{{ $row['code'] }}</td>
-                                    <td>{{ $row['job_role'] }}</td>
-                                    <td>{{ $row['advance_date'] }}</td>
-                                    <td>{{ $row['payment_method'] }}</td>
-                                    <td>{{ $row['pix_key_type'] }}</td>
-                                    <td>{{ $row['pix_key'] }}</td>
-                                    <td>{{ $row['pix_holder_document'] }}</td>
-                                    <td>{{ $row['status'] }}</td>
-                                    <td class="right">R$ {{ number_format($row['amount'], 2, ',', '.') }}</td>
-                                </tr>
-                            @endforeach
-                            <tr>
-                                <td colspan="9" class="right"><strong>Total da Obra</strong></td>
-                                <td class="right"><strong>R$ {{ number_format($data['total'], 2, ',', '.') }}</strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                @endforeach
-            </div>
+                    <tr>
+                        <td colspan="11" class="right bold">Total Geral</td>
+                        <td class="right bold">R$ {{ number_format($totalAmount, 2, ',', '.') }}</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
-    @endforeach
+    </div>
 
     <div class="total-box">
         Total Geral do Relatório: R$ {{ number_format($totalAmount, 2, ',', '.') }}

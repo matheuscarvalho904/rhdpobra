@@ -38,7 +38,7 @@ class TimeClosingService
 
                 foreach ($runs as $run) {
                     try {
-                        $this->payrollRunProcessingService->reprocess($run);
+                        $this->payrollRunProcessingService->adminReprocess($run);
                     } catch (Throwable $e) {
                         report($e);
                     }

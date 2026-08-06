@@ -177,36 +177,24 @@ class TimeClosingsTable
     ->openUrlInNewTab(),
 
                 Action::make('reprocessarTudo')
-                    ->label('Reprocessar Tudo')
+                    ->label('Recalcular e Gerar Folha')
                     ->icon('heroicon-o-arrow-path-rounded-square')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalHeading('Reprocessar tudo')
-                    ->modalDescription('Isso irá limpar marcações do período, reimportar da Sólides, processar o fechamento, gerar eventos e reprocessar a folha.')
-                    ->modalSubmitActionLabel('Reprocessar')
-                    ->visible(fn (TimeClosing $record): bool => ! in_array($record->status, ['closed', 'canceled'], true))
+                    ->modalHeading('Recalcular fechamento, eventos e folha')
+                    ->modalDescription(
+                        'O sistema usará as marcações já importadas, excluirá somente os eventos automáticos deste fechamento, gerará os eventos novamente e reprocessará todas as folhas CLT e Aprendiz da competência. Eventos manuais serão preservados.'
+                    )
+                    ->modalSubmitActionLabel('Recalcular agora')
+                    ->visible(fn (TimeClosing $record): bool => $record->status !== 'canceled')
                     ->action(function (TimeClosing $record): void {
                         if (! $record->payroll_competency_id) {
                             Notification::make()
                                 ->title('Competência da folha obrigatória')
-                                ->body('Edite o fechamento e selecione uma competência da folha antes de reprocessar tudo.')
+                                ->body(
+                                    'Edite o fechamento e selecione uma competência antes de recalcular.'
+                                )
                                 ->warning()
-                                ->send();
-
-                            return;
-                        }
-
-                        $payrollRun = PayrollRun::query()
-                            ->where('company_id', $record->company_id)
-                            ->where('payroll_competency_id', $record->payroll_competency_id)
-                            ->latest()
-                            ->first();
-
-                        if (! $payrollRun) {
-                            Notification::make()
-                                ->title('Folha não encontrada')
-                                ->body('Nenhuma folha foi encontrada para a competência deste fechamento.')
-                                ->danger()
                                 ->send();
 
                             return;
@@ -214,23 +202,52 @@ class TimeClosingsTable
 
                         try {
                             $closing = app(TimeClosingFullReprocessService::class)
-                                ->run($record, $payrollRun);
+                                ->run($record);
+
+                            $runs = PayrollRun::query()
+                                ->where('company_id', $closing->company_id)
+                                ->where(
+                                    'payroll_competency_id',
+                                    $closing->payroll_competency_id
+                                )
+                                ->whereIn('run_type', [
+                                    'payroll_clt',
+                                    'payroll_apprentice',
+                                ])
+                                ->get();
+
+                            $eventsCount = \App\Models\EmployeeVariableEvent::query()
+                                ->where(
+                                    'payroll_competency_id',
+                                    $closing->payroll_competency_id
+                                )
+                                ->where(
+                                    'notes',
+                                    'like',
+                                    "%fechamento de ponto #{$closing->id}%"
+                                )
+                                ->count();
 
                             Notification::make()
-                                ->title('Reprocessamento concluído')
+                                ->title('Fluxo concluído com sucesso')
                                 ->body(
+                                    "Colaboradores no fechamento: {$closing->employee_count} | " .
+                                    "Eventos automáticos gerados: {$eventsCount} | " .
+                                    "Folhas reprocessadas: {$runs->count()} | " .
                                     "Horas: {$closing->total_worked_hours} | " .
                                     "Extras: {$closing->total_overtime_hours} | " .
                                     "Atrasos: {$closing->total_delay_hours} | " .
                                     "Faltas: {$closing->total_absence_days}"
                                 )
                                 ->success()
+                                ->persistent()
                                 ->send();
                         } catch (Throwable $e) {
                             Notification::make()
-                                ->title('Erro ao reprocessar tudo')
+                                ->title('Erro ao recalcular fechamento e folha')
                                 ->body($e->getMessage())
                                 ->danger()
+                                ->persistent()
                                 ->send();
                         }
                     }),

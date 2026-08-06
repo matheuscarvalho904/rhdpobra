@@ -4,95 +4,97 @@ namespace App\Services;
 
 use App\Models\EmployeeVariableEvent;
 use App\Models\PayrollRun;
-use App\Models\PointIntegration;
 use App\Models\TimeClosing;
-use App\Models\TimeEntry;
-use App\Models\TimeEntryImportItem;
-use App\Services\Integrations\Solides\SolidesPunchImportService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class TimeClosingFullReprocessService
 {
-    public function run(TimeClosing $closing, PayrollRun $payrollRun, ?PointIntegration $integration = null): TimeClosing
+    /**
+     * Recalcula o fechamento usando as marcações já importadas,
+     * recria somente os eventos automáticos e reprocessa as folhas vinculadas.
+     *
+     * Não apaga marcações e não chama novamente a API da Sólides.
+     */
+    public function run(TimeClosing $closing, ?PayrollRun $legacyPayrollRun = null): TimeClosing
     {
-        return DB::transaction(function () use ($closing, $payrollRun, $integration) {
-            $closing->refresh();
+        $closing->refresh();
 
-            if (! $closing->payroll_competency_id) {
-                throw new RuntimeException('O fechamento não possui competência da folha vinculada.');
-            }
+        if (! $closing->payroll_competency_id) {
+            throw new RuntimeException(
+                'O fechamento não possui competência da folha vinculada.'
+            );
+        }
 
-            $integration ??= PointIntegration::query()
-                ->where('company_id', $closing->company_id)
-                ->where('provider', 'solides')
-                ->where('active', true)
-                ->first();
+        if ($closing->status === 'canceled') {
+            throw new RuntimeException(
+                'Fechamento cancelado não pode ser reprocessado.'
+            );
+        }
 
-            if (! $integration) {
-                throw new RuntimeException('Nenhuma integração Sólides ativa encontrada para esta empresa.');
-            }
+        $runs = $this->payrollRunsForClosing($closing);
 
-            $employeeIds = $closing->items()
-                ->whereNotNull('employee_id')
-                ->pluck('employee_id')
-                ->unique()
-                ->values();
+        if ($runs->isEmpty() && $legacyPayrollRun) {
+            $runs = collect([$legacyPayrollRun]);
+        }
 
-            if ($employeeIds->isEmpty()) {
-                $employeeIds = TimeEntry::query()
-                    ->where('company_id', $closing->company_id)
-                    ->whereBetween('entry_date', [
-                        $closing->start_date->toDateString(),
-                        $closing->end_date->toDateString(),
-                    ])
-                    ->whereNotNull('employee_id')
-                    ->pluck('employee_id')
-                    ->unique()
-                    ->values();
-            }
+        if ($runs->isEmpty()) {
+            throw new RuntimeException(
+                'Nenhuma folha CLT ou Aprendiz foi encontrada para esta empresa e competência.'
+            );
+        }
 
+        /*
+         * Etapa 1 — Remove somente eventos automáticos gerados por este fechamento.
+         * Eventos lançados manualmente permanecem intactos.
+         */
+        DB::transaction(function () use ($closing): void {
             EmployeeVariableEvent::query()
                 ->where('payroll_competency_id', $closing->payroll_competency_id)
                 ->where('notes', 'like', "%fechamento de ponto #{$closing->id}%")
                 ->delete();
-
-            $payrollRun->items()->delete();
-
-            if ($employeeIds->isNotEmpty()) {
-                TimeEntry::query()
-                    ->whereIn('employee_id', $employeeIds)
-                    ->whereBetween('entry_date', [
-                        $closing->start_date->toDateString(),
-                        $closing->end_date->toDateString(),
-                    ])
-                    ->delete();
-
-                TimeEntryImportItem::query()
-                    ->whereIn('employee_id', $employeeIds)
-                    ->whereBetween('entry_date', [
-                        $closing->start_date->toDateString(),
-                        $closing->end_date->toDateString(),
-                    ])
-                    ->delete();
-            }
-
-            app(SolidesPunchImportService::class)->import(
-                $integration,
-                $closing->start_date->toDateString(),
-                $closing->end_date->toDateString()
-            );
-
-            $closing = app(TimeClosingProcessingService::class)->process($closing->refresh());
-
-            app(TimeClosingToPayrollService::class)->generate(
-                $closing,
-                $closing->payroll_competency_id
-            );
-
-            app(PayrollRunProcessingService::class)->reprocess($payrollRun);
-
-            return $closing->refresh();
         });
+
+        /*
+         * Etapa 2 — Recalcula os itens e totais do fechamento com as marcações
+         * que já estão em time_entries.
+         */
+        $closing = app(TimeClosingProcessingService::class)
+            ->process($closing->fresh());
+
+        /*
+         * Etapa 3 — O próprio serviço limpa novamente, de forma idempotente,
+         * os eventos automáticos e os movimentos de banco relacionados antes
+         * de criar HE 50%, HE 100%, DSR, faltas e atrasos.
+         */
+        app(TimeClosingToPayrollService::class)->generate(
+            $closing,
+            $closing->payroll_competency_id
+        );
+
+        /*
+         * Etapa 4 — Reprocessa todas as folhas CLT e Aprendiz da competência.
+         * Folhas anteriormente fechadas ficam como "processed" para conferência.
+         */
+        foreach ($runs as $run) {
+            app(PayrollRunProcessingService::class)
+                ->forceReprocess($run->fresh());
+        }
+
+        return $closing->refresh();
+    }
+
+    protected function payrollRunsForClosing(TimeClosing $closing): Collection
+    {
+        return PayrollRun::query()
+            ->where('company_id', $closing->company_id)
+            ->where('payroll_competency_id', $closing->payroll_competency_id)
+            ->whereIn('run_type', [
+                'payroll_clt',
+                'payroll_apprentice',
+            ])
+            ->orderBy('id')
+            ->get();
     }
 }

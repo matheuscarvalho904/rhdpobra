@@ -87,6 +87,32 @@ class PayrollRunProcessingService
         }
     }
 
+    /**
+     * Reprocessamento administrativo usado após recálculo do ponto.
+     *
+     * Permite reabrir uma folha fechada, limpa os itens anteriores e conclui
+     * novamente como "processed", para conferência antes do novo fechamento.
+     */
+    public function forceReprocess(PayrollRun $payrollRun): void
+    {
+        $payrollRun->update([
+            'status' => 'processing',
+            'processed_at' => null,
+            'error_message' => null,
+        ]);
+
+        try {
+            $this->process($payrollRun->fresh());
+        } catch (Throwable $e) {
+            $payrollRun->update([
+                'status' => 'error',
+                'error_message' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+    }
+
     protected function processEmployeeByRunType(PayrollRun $payrollRun, Employee $employee): array
     {
         return match ($payrollRun->run_type) {

@@ -16,6 +16,12 @@ use Throwable;
 
 class SolidesPunchImportService
 {
+    /**
+     * Tamanho reduzido para evitar timeout no Laravel Cloud.
+     * Cada registro da API pode gerar até duas marcações.
+     */
+    private const PAGE_SIZE = 50;
+
     public function import(PointIntegration $integration, string $startDate, string $endDate): TimeEntryImport
     {
         $import = $this->startWebImport($integration, $startDate, $endDate);
@@ -46,10 +52,11 @@ class SolidesPunchImportService
                 'api_total_pages' => null,
                 'api_last_page_processed' => -1,
                 'api_next_page' => 0,
-                'api_size' => 500,
+                'api_size' => self::PAGE_SIZE,
                 'period_start' => $startDate,
                 'period_end' => $endDate,
                 'web_chunk_mode' => true,
+                'chunk_version' => 2,
             ],
             'started_at' => now(),
         ]);
@@ -75,7 +82,22 @@ class SolidesPunchImportService
 
         $metadata = is_array($import->metadata) ? $import->metadata : [];
         $page = max(0, (int) ($metadata['api_next_page'] ?? 0));
-        $size = max(1, min(500, (int) ($metadata['api_size'] ?? 500)));
+
+        // Importações iniciadas na versão antiga (500 registros por página)
+        // devem ser reiniciadas, para não alterar a paginação no meio do processo.
+        $storedSize = (int) ($metadata['api_size'] ?? self::PAGE_SIZE);
+
+        if ($storedSize !== self::PAGE_SIZE && $page > 0) {
+            $import->update([
+                'status' => 'failed',
+                'error_message' => 'Esta importação foi iniciada com lote antigo de 500 registros. Inicie um novo reprocessamento.',
+                'finished_at' => now(),
+            ]);
+
+            return $this->statusPayload($import->fresh());
+        }
+
+        $size = self::PAGE_SIZE;
 
         try {
             $service = new SolidesPointService($integration);
@@ -124,7 +146,7 @@ class SolidesPunchImportService
                     $pageImported += (int) $resultItem['imported'];
                     $pageIgnored += (int) $resultItem['ignored'];
                 }
-            });
+            }, 3);
 
             $nextPage = $page + 1;
             $completed = $nextPage >= $totalPages;
@@ -138,6 +160,7 @@ class SolidesPunchImportService
                 'period_end' => $import->end_date->format('Y-m-d'),
                 'last_page_records' => count($content),
                 'updated_at' => now()->toIso8601String(),
+                'chunk_version' => 2,
             ]);
 
             $import->update([
@@ -158,12 +181,14 @@ class SolidesPunchImportService
                 'integration_id' => $integration->id,
                 'import_id' => $import->id,
                 'page' => $page,
+                'page_size' => $size,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
 
             $metadata['failed_page'] = $page;
             $metadata['api_next_page'] = $page;
+            $metadata['api_size'] = $size;
 
             $import->update([
                 'status' => 'failed',

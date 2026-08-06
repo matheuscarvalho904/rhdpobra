@@ -26,18 +26,18 @@
     <h1>Reprocessando Importação</h1>
     <p class="subtitle">
         Período {{ $import->start_date->format('d/m/Y') }} a {{ $import->end_date->format('d/m/Y') }}.
+        Lotes reduzidos para estabilidade.
     </p>
 
     <div class="progress"><div id="bar" class="bar"></div></div>
-
     <div>
         <strong id="percentage">0%</strong>
         <span id="pages" style="float:right;color:#a7afbd">Preparando...</span>
     </div>
 
     <div class="grid">
-        <div class="metric">Total<strong id="total">0</strong></div>
-        <div class="metric">Importados<strong id="imported">0</strong></div>
+        <div class="metric">Total API<strong id="total">0</strong></div>
+        <div class="metric">Marcações<strong id="imported">0</strong></div>
         <div class="metric">Ignorados<strong id="ignored">0</strong></div>
     </div>
 
@@ -59,6 +59,8 @@ const statusBox = document.getElementById('status');
 const back = document.getElementById('back');
 
 let running = false;
+let retryCount = 0;
+const maxRetries = 3;
 
 function render(data) {
     const value = Number(data.percentage || 0);
@@ -92,18 +94,30 @@ async function processNext() {
 
     try {
         const data = await getJson(processUrl);
+        retryCount = 0;
         render(data);
 
         if (data.status === 'processing') {
             running = false;
-            setTimeout(processNext, 350);
+            setTimeout(processNext, 500);
             return;
         }
     } catch (error) {
-        statusBox.textContent = `Falha temporária: ${error.message}. Tentando novamente...`;
-        statusBox.classList.add('error');
+        retryCount++;
         running = false;
-        setTimeout(processNext, 2500);
+
+        if (retryCount >= maxRetries) {
+            statusBox.textContent =
+                `A página falhou ${maxRetries} vezes (${error.message}). Volte ao histórico e inicie um novo reprocessamento.`;
+            statusBox.classList.add('error');
+            back.classList.remove('hidden');
+            return;
+        }
+
+        statusBox.textContent =
+            `Falha temporária: ${error.message}. Nova tentativa ${retryCount} de ${maxRetries} em 5 segundos...`;
+        statusBox.classList.add('error');
+        setTimeout(processNext, 5000);
         return;
     }
 

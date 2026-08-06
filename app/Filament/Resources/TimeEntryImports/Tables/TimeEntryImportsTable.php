@@ -3,9 +3,7 @@
 namespace App\Filament\Resources\TimeEntryImports\Tables;
 
 use App\Models\TimeEntryImport;
-use App\Services\Integrations\Solides\SolidesPunchImportService;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -15,21 +13,9 @@ class TimeEntryImportsTable
     {
         return $table
             ->columns([
-                TextColumn::make('company.name')
-                    ->label('Empresa')
-                    ->searchable()
-                    ->sortable()
-                    ->placeholder('-'),
-
-                TextColumn::make('start_date')
-                    ->label('Data Inicial')
-                    ->date('d/m/Y')
-                    ->sortable(),
-
-                TextColumn::make('end_date')
-                    ->label('Data Final')
-                    ->date('d/m/Y')
-                    ->sortable(),
+                TextColumn::make('company.name')->label('Empresa')->searchable()->sortable()->placeholder('-'),
+                TextColumn::make('start_date')->label('Data Inicial')->date('d/m/Y')->sortable(),
+                TextColumn::make('end_date')->label('Data Final')->date('d/m/Y')->sortable(),
 
                 TextColumn::make('status')
                     ->label('Status')
@@ -49,28 +35,11 @@ class TimeEntryImportsTable
                         default => 'gray',
                     }),
 
-                TextColumn::make('total_records')
-                    ->label('Total')
-                    ->sortable(),
-
-                TextColumn::make('imported_records')
-                    ->label('Importados')
-                    ->sortable(),
-
-                TextColumn::make('ignored_records')
-                    ->label('Ignorados')
-                    ->sortable(),
-
-                TextColumn::make('error_message')
-                    ->label('Erro')
-                    ->limit(60)
-                    ->placeholder('-')
-                    ->toggleable(),
-
-                TextColumn::make('created_at')
-                    ->label('Importado em')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
+                TextColumn::make('total_records')->label('Total')->sortable(),
+                TextColumn::make('imported_records')->label('Importados')->sortable(),
+                TextColumn::make('ignored_records')->label('Ignorados')->sortable(),
+                TextColumn::make('error_message')->label('Erro')->limit(60)->placeholder('-')->toggleable(),
+                TextColumn::make('created_at')->label('Importado em')->dateTime('d/m/Y H:i')->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
             ->recordActions([
@@ -92,43 +61,14 @@ class TimeEntryImportsTable
                     ->color('warning')
                     ->requiresConfirmation()
                     ->modalHeading('Reprocessar Importação')
-                    ->modalDescription('Deseja reprocessar este período novamente?')
+                    ->modalDescription(
+                        'O período será importado novamente em páginas curtas, evitando timeout.'
+                    )
                     ->modalSubmitActionLabel('Reprocessar')
-                    ->action(function (TimeEntryImport $record): void {
-                        $integration = $record->pointIntegration;
-
-                        if (! $integration) {
-                            Notification::make()
-                                ->title('Integração não encontrada')
-                                ->danger()
-                                ->send();
-
-                            return;
-                        }
-
-                        $import = app(SolidesPunchImportService::class)
-                            ->import(
-                                $integration,
-                                $record->start_date->format('Y-m-d'),
-                                $record->end_date->format('Y-m-d')
-                            );
-
-                        if ($import->status === 'completed') {
-                            Notification::make()
-                                ->title('Importação reprocessada')
-                                ->body("Total: {$import->total_records} | Importados: {$import->imported_records} | Ignorados: {$import->ignored_records}")
-                                ->success()
-                                ->send();
-
-                            return;
-                        }
-
-                        Notification::make()
-                            ->title('Falha ao reprocessar')
-                            ->body($import->error_message ?? 'Erro desconhecido.')
-                            ->danger()
-                            ->send();
-                    }),
+                    ->url(fn (TimeEntryImport $record): string => route(
+                        'time-entry-imports.reprocess.show',
+                        $record
+                    )),
             ]);
     }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\PayrollPayslipController;
+use App\Http\Controllers\TimeClosingWebProcessController;
 use App\Http\Controllers\TimeEntryImportReprocessController;
 use App\Models\SystemBackup;
 use Illuminate\Support\Facades\Auth;
@@ -51,3 +52,23 @@ Route::get('/system-backups/{systemBackup}/download', function (SystemBackup $sy
         echo Storage::disk($disk)->get($systemBackup->path);
     }, basename($systemBackup->path));
 })->name('system-backups.download');
+
+Route::get(
+    '/app/time-closings/{timeClosing}/web-process',
+    [TimeClosingWebProcessController::class, 'show']
+)->name('time-closings.web-process.show');
+
+Route::get(
+    '/app/time-closings/{timeClosing}/web-process/process',
+    [TimeClosingWebProcessController::class, 'process']
+)->name('time-closings.web-process.process');
+
+Route::get(
+    '/app/time-closings/{timeClosing}/web-process/status',
+    [TimeClosingWebProcessController::class, 'status']
+)->name('time-closings.web-process.status');
+
+Route::get(
+    '/app/time-closings/{timeClosing}/web-process/restart',
+    [TimeClosingWebProcessController::class, 'restart']
+)->name('time-closings.web-process.restart');

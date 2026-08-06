@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Employee;
 use App\Models\PayrollRun;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -88,31 +89,178 @@ class PayrollRunProcessingService
     }
 
     /**
-     * Reprocessamento administrativo da folha.
-     *
-     * Permite recalcular uma folha anteriormente fechada após ajustes no ponto.
-     * Ao terminar, a folha fica como "processed" para conferência e novo fechamento.
+     * Inicia o reprocessamento administrativo da folha em pequenos lotes.
      */
-    public function adminReprocess(PayrollRun $payrollRun): void
+    public function startAdminWebReprocess(PayrollRun $payrollRun, bool $force = false): array
     {
-        $payrollRun->refresh();
+        $key = $this->webCacheKey($payrollRun);
 
-        $payrollRun->update([
+        if (! $force && Cache::has($key)) {
+            return $this->adminWebStatus($payrollRun);
+        }
+
+        $employees = $this->getEmployees($payrollRun);
+
+        DB::transaction(function () use ($payrollRun): void {
+            $this->clearPreviousProcessing($payrollRun);
+        });
+
+        $state = [
             'status' => 'processing',
-            'processed_at' => null,
+            'employee_ids' => $employees->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+            'total' => $employees->count(),
+            'next_index' => 0,
+            'processed' => 0,
+            'gross' => 0.0,
+            'discounts' => 0.0,
+            'net' => 0.0,
+            'fgts' => 0.0,
+            'processed_employees' => 0,
+            'message' => 'Folha preparada para reprocessamento.',
+            'error' => null,
+        ];
+
+        Cache::put($key, $state, now()->addHours(4));
+
+        return $this->adminWebStatus($payrollRun);
+    }
+
+    /**
+     * Reprocessa poucos colaboradores da folha por requisição.
+     */
+    public function processAdminWebChunk(PayrollRun $payrollRun, int $chunkSize = 3): array
+    {
+        $chunkSize = max(1, min(5, $chunkSize));
+        $key = $this->webCacheKey($payrollRun);
+        $state = Cache::get($key);
+
+        if (! is_array($state)) {
+            return $this->startAdminWebReprocess($payrollRun);
+        }
+
+        if (($state['status'] ?? null) !== 'processing') {
+            return $this->adminWebStatus($payrollRun);
+        }
+
+        $ids = collect($state['employee_ids'] ?? [])
+            ->slice((int) ($state['next_index'] ?? 0), $chunkSize)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return $this->finishAdminWebReprocess($payrollRun, $state);
+        }
+
+        $employees = Employee::query()
+            ->with([
+                'company',
+                'branch',
+                'work',
+                'contractType',
+                'jobRole',
+                'currentContract',
+            ])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($ids as $employeeId) {
+            $employee = $employees->get((int) $employeeId);
+
+            if (! $employee) {
+                $state['next_index']++;
+                $state['processed']++;
+                Cache::put($key, $state, now()->addHours(4));
+                continue;
+            }
+
+            $normalized = null;
+
+            DB::transaction(function () use ($payrollRun, $employee, &$normalized): void {
+                $payrollRun->items()
+                    ->where('employee_id', $employee->id)
+                    ->delete();
+
+                $result = $this->processEmployeeByRunType($payrollRun, $employee);
+
+                if (! $this->isValidResult($result)) {
+                    return;
+                }
+
+                $normalized = $this->normalizeCalculationResult($result);
+                $this->storePayrollItems($payrollRun, $employee, $normalized);
+            });
+
+            $state['next_index']++;
+            $state['processed']++;
+
+            if (is_array($normalized)) {
+                $state['gross'] += (float) $normalized['gross_amount'];
+                $state['discounts'] += (float) $normalized['total_discounts'];
+                $state['net'] += (float) $normalized['net_amount'];
+                $state['fgts'] += (float) $normalized['fgts_amount'];
+                $state['processed_employees']++;
+            }
+
+            $state['message'] = sprintf(
+                '%d de %d colaboradores processados na folha.',
+                (int) $state['processed'],
+                (int) $state['total'],
+            );
+
+            Cache::put($key, $state, now()->addHours(4));
+        }
+
+        if ((int) $state['processed'] >= (int) $state['total']) {
+            return $this->finishAdminWebReprocess($payrollRun, $state);
+        }
+
+        return $this->adminWebStatus($payrollRun);
+    }
+
+    public function adminWebStatus(PayrollRun $payrollRun): array
+    {
+        $state = Cache::get($this->webCacheKey($payrollRun), []);
+
+        $total = max(0, (int) ($state['total'] ?? 0));
+        $processed = max(0, (int) ($state['processed'] ?? 0));
+
+        return [
+            'status' => $state['status'] ?? 'not_started',
+            'total' => $total,
+            'processed' => $processed,
+            'percentage' => $total > 0
+                ? min(100, (int) floor(($processed / $total) * 100))
+                : 0,
+            'message' => $state['message'] ?? 'Folha ainda não iniciada.',
+            'error' => $state['error'] ?? null,
+        ];
+    }
+
+    protected function finishAdminWebReprocess(PayrollRun $payrollRun, array $state): array
+    {
+        $payrollRun->update([
+            'total_gross' => $this->money((float) ($state['gross'] ?? 0)),
+            'total_discounts' => $this->money((float) ($state['discounts'] ?? 0)),
+            'total_net' => $this->money((float) ($state['net'] ?? 0)),
+            'total_fgts' => $this->money((float) ($state['fgts'] ?? 0)),
+            'processed_employees' => (int) ($state['processed_employees'] ?? 0),
+            'status' => 'processed',
+            'processed_at' => now(),
             'error_message' => null,
         ]);
 
-        try {
-            $this->process($payrollRun->fresh());
-        } catch (Throwable $e) {
-            $payrollRun->update([
-                'status' => 'error',
-                'error_message' => $e->getMessage(),
-            ]);
+        $state['status'] = 'completed';
+        $state['message'] = 'Folha reprocessada com sucesso.';
+        $state['processed'] = (int) ($state['total'] ?? 0);
 
-            throw $e;
-        }
+        Cache::put($this->webCacheKey($payrollRun), $state, now()->addHours(4));
+
+        return $this->adminWebStatus($payrollRun);
+    }
+
+    protected function webCacheKey(PayrollRun $payrollRun): string
+    {
+        return "voktar:payroll-run:web:{$payrollRun->id}";
     }
 
     protected function processEmployeeByRunType(PayrollRun $payrollRun, Employee $employee): array

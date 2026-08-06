@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class TimeClosingProcessingService
@@ -69,6 +70,195 @@ class TimeClosingProcessingService
 
             return $closing->refresh();
         });
+    }
+
+    /**
+     * Inicia o recálculo do fechamento sem manter uma requisição longa aberta.
+     */
+    public function startWebProcess(TimeClosing $closing, bool $force = false): array
+    {
+        $key = $this->webCacheKey($closing);
+
+        if (! $force && Cache::has($key)) {
+            return $this->webStatus($closing);
+        }
+
+        $employees = $this->employeesForClosing($closing);
+
+        DB::transaction(function () use ($closing): void {
+            $closing->items()->delete();
+
+            $closing->update([
+                'employee_count' => 0,
+                'total_worked_hours' => 0,
+                'total_overtime_hours' => 0,
+                'total_delay_hours' => 0,
+                'total_absence_days' => 0,
+                'processed_at' => null,
+            ]);
+        });
+
+        $state = [
+            'status' => 'processing',
+            'employee_ids' => $employees->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+            'total' => $employees->count(),
+            'next_index' => 0,
+            'processed' => 0,
+            'employee_count' => 0,
+            'worked_hours' => 0.0,
+            'overtime_hours' => 0.0,
+            'delay_hours' => 0.0,
+            'absence_days' => 0.0,
+            'message' => 'Fechamento preparado para recálculo.',
+            'error' => null,
+        ];
+
+        Cache::put($key, $state, now()->addHours(4));
+
+        return $this->webStatus($closing);
+    }
+
+    /**
+     * Recalcula poucos colaboradores por requisição.
+     */
+    public function processWebChunk(TimeClosing $closing, int $chunkSize = 5): array
+    {
+        $chunkSize = max(1, min(10, $chunkSize));
+        $key = $this->webCacheKey($closing);
+        $state = Cache::get($key);
+
+        if (! is_array($state)) {
+            return $this->startWebProcess($closing);
+        }
+
+        if (($state['status'] ?? null) !== 'processing') {
+            return $this->webStatus($closing);
+        }
+
+        $ids = collect($state['employee_ids'] ?? [])
+            ->slice((int) ($state['next_index'] ?? 0), $chunkSize)
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return $this->finishWebProcess($closing, $state);
+        }
+
+        $employees = Employee::query()
+            ->with([
+                'currentContract',
+                'workSchedules.workSchedule.days',
+            ])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($ids as $employeeId) {
+            $employee = $employees->get((int) $employeeId);
+
+            if (! $employee) {
+                $state['next_index']++;
+                $state['processed']++;
+                continue;
+            }
+
+            $summary = $this->calculateEmployee($closing, $employee);
+
+            DB::transaction(function () use ($closing, $employee, $summary): void {
+                TimeClosingItem::query()
+                    ->where('time_closing_id', $closing->id)
+                    ->where('employee_id', $employee->id)
+                    ->delete();
+
+                if ($summary['period_invalid']) {
+                    return;
+                }
+
+                TimeClosingItem::create([
+                    'time_closing_id' => $closing->id,
+                    'employee_id' => $employee->id,
+                    'worked_hours' => $summary['worked_hours'],
+                    'expected_hours' => $summary['expected_hours'],
+                    'overtime_hours' => $summary['overtime_hours'],
+                    'delay_hours' => $summary['delay_hours'],
+                    'absence_days' => $summary['absence_days'],
+                    'entries_count' => $summary['entries_count'],
+                    'days_with_entries' => $summary['days_with_entries'],
+                    'status' => $summary['status'],
+                    'notes' => $summary['notes'],
+                    'daily_summary' => $summary['daily_summary'],
+                ]);
+            });
+
+            $state['next_index']++;
+            $state['processed']++;
+
+            if (! $summary['period_invalid']) {
+                $state['employee_count']++;
+                $state['worked_hours'] += (float) $summary['worked_hours'];
+                $state['overtime_hours'] += (float) $summary['overtime_hours'];
+                $state['delay_hours'] += (float) $summary['delay_hours'];
+                $state['absence_days'] += (float) $summary['absence_days'];
+            }
+
+            $state['message'] = sprintf(
+                '%d de %d colaboradores recalculados.',
+                (int) $state['processed'],
+                (int) $state['total'],
+            );
+
+            Cache::put($key, $state, now()->addHours(4));
+        }
+
+        if ((int) $state['processed'] >= (int) $state['total']) {
+            return $this->finishWebProcess($closing, $state);
+        }
+
+        return $this->webStatus($closing);
+    }
+
+    public function webStatus(TimeClosing $closing): array
+    {
+        $state = Cache::get($this->webCacheKey($closing), []);
+
+        $total = max(0, (int) ($state['total'] ?? 0));
+        $processed = max(0, (int) ($state['processed'] ?? 0));
+
+        return [
+            'status' => $state['status'] ?? 'not_started',
+            'total' => $total,
+            'processed' => $processed,
+            'percentage' => $total > 0
+                ? min(100, (int) floor(($processed / $total) * 100))
+                : 0,
+            'message' => $state['message'] ?? 'Recálculo ainda não iniciado.',
+            'error' => $state['error'] ?? null,
+        ];
+    }
+
+    protected function finishWebProcess(TimeClosing $closing, array $state): array
+    {
+        $closing->update([
+            'status' => 'processed',
+            'employee_count' => (int) ($state['employee_count'] ?? 0),
+            'total_worked_hours' => round((float) ($state['worked_hours'] ?? 0), 2),
+            'total_overtime_hours' => round((float) ($state['overtime_hours'] ?? 0), 2),
+            'total_delay_hours' => round((float) ($state['delay_hours'] ?? 0), 2),
+            'total_absence_days' => round((float) ($state['absence_days'] ?? 0), 2),
+            'processed_at' => now(),
+        ]);
+
+        $state['status'] = 'completed';
+        $state['message'] = 'Fechamento recalculado com sucesso.';
+        $state['processed'] = (int) ($state['total'] ?? 0);
+
+        Cache::put($this->webCacheKey($closing), $state, now()->addHours(4));
+
+        return $this->webStatus($closing);
+    }
+
+    protected function webCacheKey(TimeClosing $closing): string
+    {
+        return "voktar:time-closing:web:{$closing->id}";
     }
 
     protected function employeesForClosing(TimeClosing $closing): Collection

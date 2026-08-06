@@ -6,7 +6,6 @@ use App\Models\PayrollRun;
 use App\Models\TimeClosing;
 use App\Services\TimeBankService;
 use App\Services\TimeClosingProcessingService;
-use App\Services\TimeClosingService;
 use App\Services\TimeClosingToPayrollService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -183,91 +182,14 @@ class TimeClosingsTable
                     ->requiresConfirmation()
                     ->modalHeading('Recalcular fechamento, eventos e folha')
                     ->modalDescription(
-                        'O sistema usará as marcações já importadas, recalculará o fechamento, excluirá somente os eventos automáticos deste fechamento, gerará os eventos novamente e reprocessará as folhas CLT e Aprendiz da competência. Eventos manuais serão preservados.'
+                        'O processamento será realizado em pequenas etapas para evitar timeout. Serão usadas as marcações já importadas; eventos manuais serão preservados.'
                     )
-                    ->modalSubmitActionLabel('Recalcular agora')
+                    ->modalSubmitActionLabel('Iniciar processamento')
                     ->visible(fn (TimeClosing $record): bool => $record->status !== 'canceled')
-                    ->action(function (TimeClosing $record): void {
-                        if (! $record->payroll_competency_id) {
-                            Notification::make()
-                                ->title('Competência da folha obrigatória')
-                                ->body(
-                                    'Edite o fechamento e selecione uma competência antes de recalcular.'
-                                )
-                                ->warning()
-                                ->send();
-
-                            return;
-                        }
-
-                        $runsCount = PayrollRun::query()
-                            ->where('company_id', $record->company_id)
-                            ->where(
-                                'payroll_competency_id',
-                                $record->payroll_competency_id
-                            )
-                            ->whereIn('run_type', [
-                                'payroll_clt',
-                                'payroll_apprentice',
-                            ])
-                            ->count();
-
-                        if ($runsCount === 0) {
-                            Notification::make()
-                                ->title('Folha não encontrada')
-                                ->body(
-                                    'Nenhuma folha CLT ou Aprendiz foi encontrada para esta empresa e competência.'
-                                )
-                                ->danger()
-                                ->send();
-
-                            return;
-                        }
-
-                        try {
-                            $closing = app(TimeClosingProcessingService::class)
-                                ->process($record);
-
-                            $closing = app(TimeClosingService::class)
-                                ->sendToPayroll($closing, true);
-
-                            $eventsCount = \App\Models\EmployeeVariableEvent::query()
-                                ->where(
-                                    'payroll_competency_id',
-                                    $closing->payroll_competency_id
-                                )
-                                ->where(
-                                    'notes',
-                                    'like',
-                                    "%fechamento de ponto #{$closing->id}%"
-                                )
-                                ->count();
-
-                            Notification::make()
-                                ->title('Fechamento, eventos e folha atualizados')
-                                ->body(
-                                    "Colaboradores: {$closing->employee_count} | " .
-                                    "Eventos automáticos: {$eventsCount} | " .
-                                    "Folhas reprocessadas: {$runsCount} | " .
-                                    "Horas trabalhadas: {$closing->total_worked_hours} | " .
-                                    "Extras: {$closing->total_overtime_hours} | " .
-                                    "Atrasos: {$closing->total_delay_hours} | " .
-                                    "Faltas: {$closing->total_absence_days}"
-                                )
-                                ->success()
-                                ->persistent()
-                                ->send();
-                        } catch (Throwable $e) {
-                            report($e);
-
-                            Notification::make()
-                                ->title('Erro ao recalcular fechamento e folha')
-                                ->body($e->getMessage())
-                                ->danger()
-                                ->persistent()
-                                ->send();
-                        }
-                    }),
+                    ->url(fn (TimeClosing $record): string => route(
+                        'time-closings.web-process.show',
+                        $record
+                    )),
 
                 Action::make('fechar')
                     ->label('Fechar')

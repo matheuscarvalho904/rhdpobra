@@ -1,9 +1,7 @@
 <?php
-
 namespace App\Services;
-
+use App\Models\Employee;
 use App\Models\PayrollRun;
-use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -14,245 +12,133 @@ use ZipArchive;
 
 class PayslipBatchService
 {
-    public function __construct(
-        protected PayslipService $payslipService,
-    ) {}
+    public function __construct(protected PayslipService $payslipService) {}
 
-    public function generateZip(PayrollRun $payrollRun, ?callable $progress = null): string
+    public function startWebGeneration(PayrollRun $payrollRun, bool $force = false): array
     {
-        return $this->generate($payrollRun, null, $progress);
+        $employees = $this->getEmployeesFromPayroll($payrollRun);
+        if ($employees->isEmpty()) throw new RuntimeException('Nenhum holerite encontrado para esta folha.');
+        if (!$force && File::exists($this->manifestPath($payrollRun))) {
+            $manifest=$this->readManifest($payrollRun);
+            if (in_array($manifest['status'] ?? null,['processing','completed'],true)) return $this->publicStatus($manifest);
+        }
+        if (File::exists($this->runDir($payrollRun))) File::deleteDirectory($this->runDir($payrollRun));
+        File::ensureDirectoryExists($this->pdfDir($payrollRun));
+        File::ensureDirectoryExists($this->exportsDir());
+        $ids=$employees->pluck('id')->map(fn($id)=>(int)$id)->values()->all();
+        $manifest=[
+            'status'=>'processing','total'=>count($ids),'processed'=>0,'generated'=>0,'failed'=>0,
+            'next_index'=>0,'employee_ids'=>$ids,'failures'=>[],'message'=>'Preparando geração dos holerites.',
+            'zip_path'=>null,'started_at'=>now()->toIso8601String(),'updated_at'=>now()->toIso8601String(),
+        ];
+        $this->writeManifest($payrollRun,$manifest);
+        return $this->publicStatus($manifest);
     }
 
-    public function generatePersistentZip(PayrollRun $payrollRun, ?callable $progress = null): string
+    public function processWebChunk(PayrollRun $payrollRun, int $chunkSize = 5): array
     {
-        $exportDir = storage_path('app/private/payroll-exports');
-        File::ensureDirectoryExists($exportDir);
-
-        return $this->generate(
-            $payrollRun,
-            $exportDir . DIRECTORY_SEPARATOR . $this->makeZipFileName($payrollRun->id),
-            $progress,
-        );
+        $chunkSize=max(1,min(10,$chunkSize));
+        $manifest=$this->readManifest($payrollRun);
+        if (in_array($manifest['status'] ?? null,['completed','failed'],true)) return $this->publicStatus($manifest);
+        $ids=collect($manifest['employee_ids'] ?? [])->slice((int)($manifest['next_index'] ?? 0),$chunkSize)->values();
+        if ($ids->isEmpty()) return $this->finalize($payrollRun,$manifest);
+        $employees=Employee::query()->whereIn('id',$ids)->get()->keyBy('id');
+        foreach($ids as $employeeId){
+            $employee=$employees->get((int)$employeeId);
+            $manifest['processed']++;
+            $manifest['next_index']++;
+            if(!$employee){
+                $manifest['failed']++;
+                $manifest['failures'][]=['employee_id'=>(int)$employeeId,'employee_name'=>'-','message'=>'Colaborador não encontrado.'];
+                continue;
+            }
+            try{
+                $pdf=$this->payslipService->generate($payrollRun,$employee);
+                File::put($this->pdfDir($payrollRun).DIRECTORY_SEPARATOR.$this->pdfName($employee,$payrollRun),$pdf->output());
+                unset($pdf); gc_collect_cycles();
+                $manifest['generated']++;
+            }catch(Throwable $e){
+                $manifest['failed']++;
+                $manifest['failures'][]=['employee_id'=>$employee->id,'employee_name'=>$employee->name ?? '-','message'=>$e->getMessage()];
+                Log::error('Erro ao gerar holerite em lote via web.',['payroll_run_id'=>$payrollRun->id,'employee_id'=>$employee->id,'message'=>$e->getMessage()]);
+            }
+        }
+        $manifest['message']=sprintf('%d de %d holerites processados.',$manifest['processed'],$manifest['total']);
+        $manifest['updated_at']=now()->toIso8601String();
+        $this->writeManifest($payrollRun,$manifest);
+        return $manifest['processed'] >= $manifest['total'] ? $this->finalize($payrollRun,$manifest) : $this->publicStatus($manifest);
     }
 
-    public function persistentZipPath(PayrollRun $payrollRun): string
+    public function webStatus(PayrollRun $payrollRun): array
     {
-        return storage_path('app/private/payroll-exports/' . $this->makeZipFileName($payrollRun->id));
+        if(!File::exists($this->manifestPath($payrollRun))) return ['status'=>'not_started','total'=>0,'processed'=>0,'generated'=>0,'failed'=>0,'percentage'=>0,'message'=>'Geração ainda não iniciada.','download_ready'=>false];
+        return $this->publicStatus($this->readManifest($payrollRun));
     }
 
     public function hasPersistentZip(PayrollRun $payrollRun): bool
     {
-        $path = $this->persistentZipPath($payrollRun);
-
-        return File::exists($path) && File::size($path) > 0;
+        $path=$this->zipPath($payrollRun);
+        return File::exists($path) && File::size($path)>0;
     }
 
-    protected function generate(
-        PayrollRun $payrollRun,
-        ?string $destinationPath = null,
-        ?callable $progress = null,
-    ): string {
-        $payrollRun->loadMissing(['company', 'work']);
+    public function persistentZipPath(PayrollRun $payrollRun): string { return $this->zipPath($payrollRun); }
 
-        $employees = $this->getEmployeesFromPayroll($payrollRun);
+    public function resetWebGeneration(PayrollRun $payrollRun): void
+    {
+        if(File::exists($this->runDir($payrollRun))) File::deleteDirectory($this->runDir($payrollRun));
+        if(File::exists($this->manifestPath($payrollRun))) File::delete($this->manifestPath($payrollRun));
+        if(File::exists($this->zipPath($payrollRun))) File::delete($this->zipPath($payrollRun));
+    }
 
-        if ($employees->isEmpty()) {
-            throw new RuntimeException('Nenhum holerite encontrado para esta folha.');
-        }
-
-        $baseDir = storage_path('app/temp/payslips');
-        $runDir = $baseDir . DIRECTORY_SEPARATOR . 'run-' . $payrollRun->id . '-' . now()->format('YmdHis');
-        $pdfDir = $runDir . DIRECTORY_SEPARATOR . 'pdfs';
-
-        File::ensureDirectoryExists($pdfDir);
-
-        $total = $employees->count();
-        $processed = 0;
-        $generated = 0;
-        $failures = [];
-
-        try {
-            foreach ($employees as $employee) {
-                $processed++;
-
-                try {
-                    $pdf = $this->payslipService->generate($payrollRun, $employee);
-
-                    $fileName = $this->makePdfFileName(
-                        $employee->name ?? 'colaborador',
-                        $employee->id,
-                        $payrollRun->id,
-                    );
-
-                    File::put($pdfDir . DIRECTORY_SEPARATOR . $fileName, $pdf->output());
-
-                    unset($pdf);
-                    gc_collect_cycles();
-
-                    $generated++;
-
-                    if ($progress) {
-                        $progress($processed, $total, $employee, 'success', null);
-                    }
-                } catch (Throwable $e) {
-                    $failures[] = [
-                        'employee_id' => $employee->id,
-                        'employee_name' => $employee->name ?? '-',
-                        'message' => $e->getMessage(),
-                    ];
-
-                    Log::error('Erro ao gerar holerite em lote.', [
-                        'payroll_run_id' => $payrollRun->id,
-                        'employee_id' => $employee->id,
-                        'employee_name' => $employee->name ?? null,
-                        'message' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString(),
-                    ]);
-
-                    if ($progress) {
-                        $progress($processed, $total, $employee, 'failed', $e->getMessage());
-                    }
-                }
-            }
-
-            if ($generated === 0) {
-                throw new RuntimeException('Nenhum holerite pôde ser gerado. Consulte storage/logs/laravel.log.');
-            }
-
-            if ($failures !== []) {
-                $this->writeFailureReport($pdfDir, $payrollRun->id, $failures);
-            }
-
-            $zipPath = $destinationPath ?: $runDir . DIRECTORY_SEPARATOR . $this->makeZipFileName($payrollRun->id);
-            File::ensureDirectoryExists(dirname($zipPath));
-
-            $this->createZip($pdfDir, $zipPath);
-
-            if (! File::exists($zipPath) || File::size($zipPath) <= 0) {
-                throw new RuntimeException('O ZIP foi criado, mas ficou vazio ou indisponível.');
-            }
-
-            $this->cleanupOldFiles($baseDir, $runDir);
-
-            return $zipPath;
-        } catch (Throwable $e) {
-            Log::error('Falha na geração do ZIP de holerites.', [
-                'payroll_run_id' => $payrollRun->id,
-                'run_directory' => $runDir,
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw $e;
-        }
+    protected function finalize(PayrollRun $payrollRun,array $manifest): array
+    {
+        try{
+            if(($manifest['generated'] ?? 0)<=0) throw new RuntimeException('Nenhum holerite pôde ser gerado.');
+            if(!empty($manifest['failures'])) $this->writeFailures($payrollRun,$manifest['failures']);
+            $zip=new ZipArchive();
+            if($zip->open($this->zipPath($payrollRun),ZipArchive::CREATE|ZipArchive::OVERWRITE)!==true) throw new RuntimeException('Não foi possível criar o ZIP.');
+            try{ foreach(File::files($this->pdfDir($payrollRun)) as $file){ $zip->addFile($file->getRealPath(),$file->getFilename()); } } finally { $zip->close(); }
+            if(!$this->hasPersistentZip($payrollRun)) throw new RuntimeException('O ZIP foi criado, mas ficou vazio.');
+            $manifest['status']='completed'; $manifest['zip_path']=$this->zipPath($payrollRun);
+            $manifest['message']=sprintf('Concluído: %d holerites gerados%s.',$manifest['generated'],$manifest['failed']>0?' e '.$manifest['failed'].' falha(s)':'');
+        }catch(Throwable $e){ $manifest['status']='failed'; $manifest['message']=$e->getMessage(); }
+        $manifest['updated_at']=now()->toIso8601String();
+        $this->writeManifest($payrollRun,$manifest);
+        return $this->publicStatus($manifest);
     }
 
     protected function getEmployeesFromPayroll(PayrollRun $payrollRun): Collection
     {
-        return $payrollRun->items()
-            ->with('employee')
-            ->select(['id', 'payroll_run_id', 'employee_id'])
-            ->get()
-            ->pluck('employee')
-            ->filter()
-            ->unique('id')
-            ->sortBy(fn ($employee) => mb_strtoupper((string) ($employee->name ?? '')))
-            ->values();
+        return $payrollRun->items()->with('employee')->select(['id','payroll_run_id','employee_id'])->get()->pluck('employee')->filter()->unique('id')->sortBy(fn($e)=>mb_strtoupper((string)($e->name ?? '')))->values();
     }
 
-    protected function createZip(string $sourceDir, string $zipPath): void
+    protected function publicStatus(array $m): array
     {
-        $zip = new ZipArchive();
-
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('Não foi possível criar o arquivo ZIP dos holerites.');
-        }
-
-        try {
-            foreach (File::files($sourceDir) as $file) {
-                $realPath = $file->getRealPath();
-
-                if ($realPath && File::exists($realPath)) {
-                    $zip->addFile($realPath, $file->getFilename());
-                }
-            }
-        } finally {
-            $zip->close();
-        }
+        $total=max(0,(int)($m['total'] ?? 0)); $processed=max(0,(int)($m['processed'] ?? 0));
+        return ['status'=>$m['status'] ?? 'processing','total'=>$total,'processed'=>$processed,'generated'=>(int)($m['generated'] ?? 0),'failed'=>(int)($m['failed'] ?? 0),'percentage'=>$total>0?min(100,(int)floor(($processed/$total)*100)):0,'message'=>$m['message'] ?? null,'download_ready'=>($m['status'] ?? null)==='completed' && !empty($m['zip_path']) && File::exists($m['zip_path'])];
     }
 
-    protected function writeFailureReport(string $pdfDir, int $payrollRunId, array $failures): void
+    protected function readManifest(PayrollRun $run): array
     {
-        $lines = [
-            'VOKTAR RH & DP - FALHAS NA GERAÇÃO DE HOLERITES',
-            "Processamento da folha: {$payrollRunId}",
-            'Gerado em: ' . now()->format('d/m/Y H:i:s'),
-            str_repeat('-', 80),
-        ];
-
-        foreach ($failures as $failure) {
-            $lines[] = sprintf(
-                'ID %s | %s | %s',
-                $failure['employee_id'] ?? '-',
-                $failure['employee_name'] ?? '-',
-                $failure['message'] ?? 'Erro não informado',
-            );
-        }
-
-        File::put($pdfDir . DIRECTORY_SEPARATOR . 'FALHAS-NA-GERACAO.txt', implode(PHP_EOL, $lines));
+        $data=json_decode((string)File::get($this->manifestPath($run)),true);
+        if(!is_array($data)) throw new RuntimeException('Controle da geração inválido.');
+        return $data;
     }
-
-    protected function makePdfFileName(string $employeeName, int $employeeId, int $payrollRunId): string
+    protected function writeManifest(PayrollRun $run,array $m): void { File::ensureDirectoryExists($this->exportsDir()); File::put($this->manifestPath($run),json_encode($m,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE),true); }
+    protected function writeFailures(PayrollRun $run,array $failures): void
     {
-        $slug = Str::of($employeeName)
-            ->ascii()
-            ->lower()
-            ->replaceMatches('/[^a-z0-9]+/', '-')
-            ->trim('-');
-
-        $slug = $slug->isEmpty() ? 'colaborador' : (string) $slug;
-
-        return "holerite-{$slug}-emp-{$employeeId}-folha-{$payrollRunId}.pdf";
+        $lines=['VOKTAR RH & DP - FALHAS NA GERAÇÃO DE HOLERITES','Folha: '.$run->id,str_repeat('-',80)];
+        foreach($failures as $f) $lines[]=sprintf('ID %s | %s | %s',$f['employee_id'] ?? '-',$f['employee_name'] ?? '-',$f['message'] ?? '-');
+        File::put($this->pdfDir($run).DIRECTORY_SEPARATOR.'FALHAS-NA-GERACAO.txt',implode(PHP_EOL,$lines));
     }
-
-    protected function makeZipFileName(int $payrollRunId): string
+    protected function pdfName(Employee $e,PayrollRun $run): string
     {
-        return "holerites-folha-{$payrollRunId}.zip";
+        $slug=(string)Str::of($e->name ?? 'colaborador')->ascii()->lower()->replaceMatches('/[^a-z0-9]+/','-')->trim('-');
+        return 'holerite-'.($slug ?: 'colaborador').'-emp-'.$e->id.'-folha-'.$run->id.'.pdf';
     }
-
-    protected function cleanupOldFiles(string $baseDir, ?string $currentRunDir = null): void
-    {
-        if (! File::exists($baseDir)) {
-            return;
-        }
-
-        foreach (File::directories($baseDir) as $dir) {
-            try {
-                if ($currentRunDir && realpath($dir) === realpath($currentRunDir)) {
-                    continue;
-                }
-
-                if (! File::exists($dir)) {
-                    continue;
-                }
-
-                $lastModified = File::lastModified($dir);
-
-                if (! is_int($lastModified) || $lastModified <= 0) {
-                    continue;
-                }
-
-                $lastModifiedAt = Carbon::createFromTimestamp($lastModified);
-
-                if ($lastModifiedAt->diffInHours(now()) > 6) {
-                    File::deleteDirectory($dir);
-                }
-            } catch (Throwable $e) {
-                Log::warning('Erro ao limpar diretório temporário de holerites.', [
-                    'directory' => $dir,
-                    'message' => $e->getMessage(),
-                ]);
-            }
-        }
-    }
+    protected function exportsDir(): string { return storage_path('app/private/payroll-exports'); }
+    protected function runDir(PayrollRun $r): string { return storage_path('app/temp/payslips/web-run-'.$r->id); }
+    protected function pdfDir(PayrollRun $r): string { return $this->runDir($r).DIRECTORY_SEPARATOR.'pdfs'; }
+    protected function manifestPath(PayrollRun $r): string { return $this->exportsDir().DIRECTORY_SEPARATOR.'holerites-folha-'.$r->id.'.json'; }
+    protected function zipPath(PayrollRun $r): string { return $this->exportsDir().DIRECTORY_SEPARATOR.'holerites-folha-'.$r->id.'.zip'; }
 }
